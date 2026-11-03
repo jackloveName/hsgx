@@ -6,3 +6,7 @@ build/
 *.iml
 .DS_Store
 *.log
+
+# 本地笔记，不进仓库
+a.md
+problem.md
