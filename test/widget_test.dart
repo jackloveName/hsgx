@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hsgx/models.dart';
+import 'package:hsgx/screens/item_form_screen.dart';
 import 'package:hsgx/widgets.dart';
 
 void main() {
@@ -20,7 +22,7 @@ void main() {
     expect(item.purchaseTotal, 2000);
     expect(item.currentTotal, 1200);
     expect(item.ownedDays, 10);
-    expect(item.ownedDailyCost, 100);
+    expect(item.ownedDailyCost, 200);
   });
 
   test('物品序列化后保留标签与状态历史', () {
@@ -41,6 +43,24 @@ void main() {
     expect(restored.statusHistory.single.status, 'inuse');
   });
 
+  test('心愿序列化后保留购买动机并兼容旧数据', () {
+    final wish = WishEntry(
+      id: 'wish',
+      name: '相机',
+      createdAt: '2026-01-01T00:00:00.000',
+      desireType: 'long-term',
+    );
+    final restored = WishEntry.fromJson(wish.toJson());
+    final legacy = WishEntry.fromJson({
+      'id': 'legacy',
+      'name': '旧心愿',
+      'createdAt': '2026-01-01T00:00:00.000',
+    });
+
+    expect(restored.desireType, 'long-term');
+    expect(legacy.desireType, isEmpty);
+  });
+
   test('物品序列化后保留多图、币种、关联和完整生命周期信息', () {
     final item = InventoryItem(
       id: 'full-round-trip',
@@ -59,6 +79,7 @@ void main() {
       disposalPlatform: '闲鱼',
       disposalContact: '买家',
       disposalPrice: 500,
+      disposalCost: 50,
       processDate: '2026-10-01',
     );
 
@@ -71,7 +92,32 @@ void main() {
     expect(restored.repairDays, 7);
     expect(restored.disposalPlatform, '闲鱼');
     expect(restored.disposalContact, '买家');
+    expect(restored.disposalCost, 50);
+    expect(restored.cashRecoveredAmount, 450);
     expect(restored.processDate, '2026-10-01');
+  });
+
+  test('闲置回血计划字段可以完整序列化', () {
+    final item = InventoryItem(
+      id: 'recovery-plan',
+      name: '旧相机',
+      status: 'idle',
+      purchaseDate: '2026-01-01',
+      createdAt: '2026-01-01T00:00:00.000',
+      recoveryMethod: '转卖',
+      recoveryTargetPrice: 800,
+      recoveryDeadline: '2026-12-01',
+      recoveryPlatform: '闲鱼',
+      recoveryNote: '先清洁镜头',
+    );
+
+    final restored = InventoryItem.fromJson(item.toJson());
+    expect(restored.hasRecoveryPlan, isTrue);
+    expect(restored.recoveryMethod, '转卖');
+    expect(restored.recoveryTargetPrice, 800);
+    expect(restored.recoveryDeadline, '2026-12-01');
+    expect(restored.recoveryPlatform, '闲鱼');
+    expect(restored.recoveryNote, '先清洁镜头');
   });
 
   testWidgets('下拉字段从底部弹出并回传选择结果', (tester) async {
@@ -132,5 +178,95 @@ void main() {
     final screenWidth = tester.getSize(find.byType(Scaffold)).width;
     final emptyStateWidth = tester.getSize(find.byType(EmptyState)).width;
     expect(emptyStateWidth, screenWidth - 40);
+  });
+
+  testWidgets('日期选择器从底部弹出并使用中文', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: const [Locale('zh', 'CN')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: TextButton(
+                onPressed: () => showAppDatePicker(
+                  context,
+                  initialDate: DateTime(2026, 11, 4),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2030),
+                  title: '选择日期',
+                ),
+                child: const Text('打开日期'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开日期'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择日期'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    expect(find.byType(CalendarDatePicker), findsOneWidget);
+    expect(find.textContaining('2026年'), findsWidgets);
+    final pickerTop = tester.getTopLeft(find.byType(CalendarDatePicker)).dy;
+    expect(
+      pickerTop,
+      greaterThan(tester.getSize(find.byType(Scaffold)).height / 3),
+    );
+  });
+
+  testWidgets('物品数量使用加减步进器且最小值为1', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ItemFormScreen()));
+    await tester.pump();
+
+    String quantity() =>
+        tester.widget<Text>(find.byKey(const Key('quantity-value'))).data!;
+    expect(quantity(), '1');
+
+    await tester.ensureVisible(find.byKey(const Key('quantity-minus')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('quantity-minus')));
+    await tester.pump();
+    expect(quantity(), '1');
+
+    await tester.ensureVisible(find.byKey(const Key('quantity-plus')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('quantity-plus')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('quantity-plus')));
+    await tester.pump();
+    expect(quantity(), '3');
+
+    await tester.tap(find.byKey(const Key('quantity-minus')));
+    await tester.pump();
+    expect(quantity(), '2');
+  });
+
+  testWidgets('手动计次使用目标使用次数，购入价为必填项', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ItemFormScreen()));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('手动记次数'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('手动记次数'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('目标使用次数（选填）'), findsOneWidget);
+    expect(find.text('目标使用天数（选填）'), findsNothing);
+
+    await tester.ensureVisible(find.text('放入匣中'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('放入匣中'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入购入价'), findsOneWidget);
   });
 }

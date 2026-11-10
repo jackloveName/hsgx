@@ -16,26 +16,27 @@ class CollectionScreen extends StatelessWidget {
         final favorites =
             AppStore.instance.items.where((item) => item.favorite).toList()
               ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        final value = favorites.fold<double>(
-          0,
-          (sum, item) => sum + item.currentTotal,
+        final value = favorites
+            .where((item) => item.isActive && item.canAggregateInBaseCurrency)
+            .fold<double>(0, (sum, item) => sum + item.currentTotal);
+        final hasForeignCurrency = favorites.any(
+          (item) => item.isActive && !item.canAggregateInBaseCurrency,
         );
         final categories = favorites
             .map((item) => item.category)
             .toSet()
             .length;
         return PageFrame(
-          title: '收藏馆',
+          title: '珍爱之物',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               GradientCard(
-                colors: const [Color(0xFF4EB6A2), Color(0xFF806CC2)],
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'MY COLLECTION',
+                      '匣中珍爱',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 9,
@@ -45,7 +46,7 @@ class CollectionScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      '我的生活藏品',
+                      '珍爱之物',
                       style: TextStyle(
                         fontFamily: 'Songti SC',
                         color: Colors.white,
@@ -63,7 +64,7 @@ class CollectionScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: MiniMetric(
-                            label: '收藏物品',
+                            label: '珍爱物品',
                             value: '${favorites.length}',
                             dark: true,
                           ),
@@ -71,7 +72,9 @@ class CollectionScreen extends StatelessWidget {
                         Expanded(
                           child: MiniMetric(
                             label: '当前估值',
-                            value: '¥${formatMoney(value, compact: true)}',
+                            value: hasForeignCurrency
+                                ? '¥${formatMoney(value, compact: true)} + 外币'
+                                : '¥${formatMoney(value, compact: true)}',
                             dark: true,
                           ),
                         ),
@@ -88,16 +91,16 @@ class CollectionScreen extends StatelessWidget {
                 ),
               ),
               const SectionHeading(
-                title: '馆藏清单',
+                title: '珍爱清单',
                 trailing: Text(
-                  '点击爱心收藏',
+                  '点击爱心放入珍爱',
                   style: TextStyle(color: appMuted, fontSize: 10),
                 ),
               ),
               if (favorites.isEmpty)
                 const EmptyState(
-                  title: '收藏馆还在等第一件藏品',
-                  description: '打开任意物品详情，点击爱心即可放入收藏馆。',
+                  title: '珍爱清单还在等第一件物',
+                  description: '打开任意物品详情，点击爱心即可放入珍爱。',
                   icon: Icons.favorite_border_rounded,
                 )
               else
@@ -108,121 +111,19 @@ class CollectionScreen extends StatelessWidget {
                     maxCrossAxisExtent: 230,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    childAspectRatio: 0.77,
+                    mainAxisExtent: 218,
                   ),
                   itemCount: favorites.length,
                   itemBuilder: (context, index) {
                     final item = favorites[index];
-                    return SoftCard(
-                      padding: const EdgeInsets.all(10),
-                      color: item.statusInfo.softColor,
-                      borderColor: item.statusInfo.color.withValues(
-                        alpha: 0.16,
-                      ),
+                    return CollectionItemCard(
+                      key: Key('collection-card-${item.id}'),
+                      item: item,
+                      index: index,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => ItemDetailScreen(itemId: item.id),
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                    borderRadius: BorderRadius.circular(17),
-                                  ),
-                                  child: Center(
-                                    child: ItemVisual(
-                                      item: item,
-                                      size: 110,
-                                      radius: 16,
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 8,
-                                  top: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 7,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.85,
-                                      ),
-                                      borderRadius: BorderRadius.circular(7),
-                                    ),
-                                    child: Text(
-                                      'NO.${(index + 1).toString().padLeft(2, '0')}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF6E6862),
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 8,
-                                  bottom: 8,
-                                  child: StatusPill(
-                                    status: item.statusInfo,
-                                    compact: true,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 9),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              const Icon(
-                                Icons.favorite_rounded,
-                                size: 13,
-                                color: appPink,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item.categoryInfo.name,
-                                  style: const TextStyle(
-                                    color: appMuted,
-                                    fontSize: 9,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                '${item.currencySymbol}${formatMoney(item.currentTotal, compact: true)}',
-                                style: const TextStyle(
-                                  color: Color(0xFF2E7568),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                       ),
                     );
                   },
@@ -231,6 +132,137 @@ class CollectionScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class CollectionItemCard extends StatelessWidget {
+  const CollectionItemCard({
+    super.key,
+    required this.item,
+    required this.index,
+    required this.onTap,
+  });
+
+  final InventoryItem item;
+  final int index;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return SoftCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(8),
+      radius: 21,
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                ItemPhoto(item: item, height: 143, radius: 0),
+                Positioned(
+                  left: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF26342C).withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Text(
+                      'NO.${(index + 1).toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.favorite_rounded,
+                      size: 14,
+                      color: appPink,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: StatusPill(status: item.statusInfo, compact: true),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                '${item.currencySymbol}${formatMoney(item.currentTotal, compact: true)}',
+                style: TextStyle(
+                  color: primary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              Icon(
+                Icons.place_outlined,
+                size: 12,
+                color: appMuted.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Text(
+                  item.storageLocation.trim().isEmpty
+                      ? '${item.categoryInfo.name} · 未设置位置'
+                      : '${item.categoryInfo.name} · ${item.storageLocation}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: appMuted, fontSize: 9),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

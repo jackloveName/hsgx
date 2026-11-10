@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -35,5 +36,10 @@ class LocalImageStore {
     if (await photoDirectory.exists()) {
       await photoDirectory.delete(recursive: true);
     }
+  }
+
+  Future<Uint8List?> load(String path) async {
+    final file = File(path);
+    return await file.exists() ? file.readAsBytes() : null;
   }
 }

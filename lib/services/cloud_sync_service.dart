@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
@@ -38,8 +39,13 @@ class CloudSyncResult {
 }
 
 class CloudSyncService {
-  CloudSyncService({http.Client? client, ApiClient? apiClient})
-    : _api = apiClient ?? ApiClient(client: client) {
+  CloudSyncService({
+    http.Client? client,
+    ApiClient? apiClient,
+    void Function()? onUnauthorized,
+  }) : _api =
+           apiClient ??
+           ApiClient(client: client, onUnauthorized: onUnauthorized) {
     _config = ConfigApi(_api);
     _imageUploader = ImageUploadService(_api);
   }
@@ -74,13 +80,22 @@ class CloudSyncService {
     required List<String> storageLocations,
   }) async {
     final prepared = await _prepareItemsWithImages(items, token);
-    await _saveAccountData(
-      phone: phone,
-      token: token,
-      items: prepared.items,
-      wishlist: wishlist,
-      storageLocations: storageLocations,
-    );
+    try {
+      await _saveAccountData(
+        phone: phone,
+        token: token,
+        items: prepared.items,
+        wishlist: wishlist,
+        storageLocations: storageLocations,
+      );
+    } catch (_) {
+      await _cleanupUploadedImages(
+        prepared.items,
+        existingResources: items.expand((item) => item.imagePaths).toSet(),
+        token: token,
+      );
+      rethrow;
+    }
     return CloudSyncResult(
       items: prepared.items,
       wishlist: wishlist,
@@ -88,6 +103,26 @@ class CloudSyncService {
       uploadedImageCount: prepared.uploadedImageCount,
       syncedAt: DateTime.now(),
     );
+  }
+
+  Future<void> clearAccountData({
+    required String phone,
+    required String token,
+  }) {
+    return _saveAccountData(
+      phone: phone,
+      token: token,
+      items: const [],
+      wishlist: const [],
+      storageLocations: const [],
+    );
+  }
+
+  Future<void> deleteRemoteImages(
+    Iterable<String> resources, {
+    required String token,
+  }) {
+    return _imageUploader.deleteRemoteImages(resources, token: token);
   }
 
   Future<CloudSyncResult> syncGuestData({
@@ -144,13 +179,24 @@ class CloudSyncService {
       ...guest.storageLocations,
     }.where((location) => location.trim().isNotEmpty).toList();
 
-    await _saveAccountData(
-      phone: phone,
-      token: token,
-      items: mergedItems,
-      wishlist: mergedWishlist,
-      storageLocations: mergedLocations,
-    );
+    try {
+      await _saveAccountData(
+        phone: phone,
+        token: token,
+        items: mergedItems,
+        wishlist: mergedWishlist,
+        storageLocations: mergedLocations,
+      );
+    } catch (_) {
+      await _cleanupUploadedImages(
+        prepared.items,
+        existingResources: guest.items
+            .expand((item) => item.imagePaths)
+            .toSet(),
+        token: token,
+      );
+      rethrow;
+    }
 
     return CloudSyncResult(
       items: mergedItems,
@@ -165,29 +211,98 @@ class CloudSyncService {
 
   Future<({List<InventoryItem> items, int uploadedImageCount})>
   _prepareItemsWithImages(List<InventoryItem> source, String token) async {
-    var uploadedImageCount = 0;
-    final items = <InventoryItem>[];
-    for (final item in source) {
-      final uploadedPaths = <String>[];
-      for (final imagePath in item.imagePaths) {
-        final clean = imagePath.trim();
-        if (clean.isEmpty ||
-            clean.startsWith('http://') ||
-            clean.startsWith('https://')) {
-          if (clean.isNotEmpty) uploadedPaths.add(clean);
-          continue;
-        }
-        if (!await LocalFileSource.exists(clean)) continue;
-        final remoteUrl = await _imageUploader.uploadLocalPath(
-          clean,
-          token: token,
-        );
-        uploadedPaths.add(remoteUrl);
-        uploadedImageCount += 1;
+    final tasks = <({int itemIndex, int imageIndex, String path})>[];
+    for (var itemIndex = 0; itemIndex < source.length; itemIndex++) {
+      final paths = source[itemIndex].imagePaths;
+      for (var imageIndex = 0; imageIndex < paths.length; imageIndex++) {
+        tasks.add((
+          itemIndex: itemIndex,
+          imageIndex: imageIndex,
+          path: paths[imageIndex].trim(),
+        ));
       }
-      items.add(item.copyWith(imagePaths: uploadedPaths));
     }
-    return (items: items, uploadedImageCount: uploadedImageCount);
+    var uploadedImageCount = 0;
+    final resolved =
+        await _mapConcurrent<
+          ({int itemIndex, int imageIndex, String path}),
+          String?
+        >(
+          tasks,
+          concurrency: 3,
+          action: (task) async {
+            final clean = task.path;
+            if (clean.isEmpty) return null;
+            if (clean.startsWith('http://') || clean.startsWith('https://')) {
+              return clean;
+            }
+            if (!await LocalFileSource.exists(clean)) return null;
+            final remoteUrl = await _imageUploader.uploadLocalPath(
+              clean,
+              token: token,
+            );
+            uploadedImageCount += 1;
+            return remoteUrl;
+          },
+        );
+    final pathsByItem = <int, List<String>>{};
+    for (var index = 0; index < tasks.length; index++) {
+      final task = tasks[index];
+      final path = resolved[index];
+      if (path == null) continue;
+      (pathsByItem[task.itemIndex] ??= []).add(path);
+    }
+    return (
+      items: [
+        for (var index = 0; index < source.length; index++)
+          source[index].copyWith(imagePaths: pathsByItem[index] ?? const []),
+      ],
+      uploadedImageCount: uploadedImageCount,
+    );
+  }
+
+  Future<List<T>> _mapConcurrent<S, T>(
+    List<S> source, {
+    required int concurrency,
+    required Future<T> Function(S value) action,
+  }) async {
+    final results = List<T?>.filled(source.length, null);
+    var nextIndex = 0;
+    final workerCount = math.min(
+      math.max(1, concurrency),
+      math.max(1, source.length),
+    );
+    await Future.wait([
+      for (var worker = 0; worker < workerCount; worker++)
+        () async {
+          while (nextIndex < source.length) {
+            final index = nextIndex++;
+            results[index] = await action(source[index]);
+          }
+        }(),
+    ]);
+    return results.cast<T>();
+  }
+
+  Future<void> _cleanupUploadedImages(
+    List<InventoryItem> items, {
+    required Set<String> existingResources,
+    required String token,
+  }) async {
+    final uploaded = items
+        .expand((item) => item.imagePaths)
+        .where(
+          (path) =>
+              !existingResources.contains(path) &&
+              (path.startsWith('https://') || path.startsWith('http://')),
+        )
+        .toList();
+    if (uploaded.isEmpty) return;
+    try {
+      await _imageUploader.deleteRemoteImages(uploaded, token: token);
+    } on Object {
+      // Preserve the original save error; orphan cleanup is best effort.
+    }
   }
 
   Future<void> _saveAccountData({
@@ -270,7 +385,7 @@ class CloudSyncService {
           current = jsonDecode(text);
           continue;
         } on FormatException {
-          return text;
+          throw const FormatException('云端配置不是有效的 JSON');
         }
       }
       break;
@@ -281,11 +396,19 @@ class CloudSyncService {
   List<InventoryItem> _parseItems(Object? value) {
     var decoded = _decodeConfig(value);
     if (decoded is Map && decoded['data'] is List) decoded = decoded['data'];
-    if (decoded is! List) return [];
-    return decoded.whereType<Map>().map((entry) {
-      final item = InventoryItem.fromJson(
-        entry.map((key, value) => MapEntry(key.toString(), value)),
-      );
+    if (decoded == null) return [];
+    if (decoded is! List) throw const FormatException('云端物品配置格式错误');
+    final items = <InventoryItem>[];
+    for (var index = 0; index < decoded.length; index++) {
+      final entry = decoded[index];
+      if (entry is! Map) {
+        throw FormatException('云端物品配置第 ${index + 1} 项格式错误');
+      }
+      final map = entry.map((key, value) => MapEntry(key.toString(), value));
+      if ((map['id']?.toString().trim() ?? '').isEmpty) {
+        throw FormatException('云端物品配置第 ${index + 1} 项缺少 id');
+      }
+      final item = InventoryItem.fromJson(map);
       final images = item.imagePaths
           .map(
             (path) => path.startsWith('/') && !path.startsWith('//')
@@ -293,24 +416,35 @@ class CloudSyncService {
                 : path,
           )
           .toList();
-      return item.copyWith(imagePaths: images);
-    }).toList();
+      items.add(item.copyWith(imagePaths: images));
+    }
+    return items;
   }
 
   List<WishEntry> _parseWishlist(Object? value) {
     var decoded = _decodeConfig(value);
     if (decoded is Map && decoded['data'] is List) decoded = decoded['data'];
-    if (decoded is! List) return [];
-    return decoded.whereType<Map>().map((entry) {
-      return WishEntry.fromJson(
-        entry.map((key, value) => MapEntry(key.toString(), value)),
-      );
-    }).toList();
+    if (decoded == null) return [];
+    if (decoded is! List) throw const FormatException('云端心愿配置格式错误');
+    final wishes = <WishEntry>[];
+    for (var index = 0; index < decoded.length; index++) {
+      final entry = decoded[index];
+      if (entry is! Map) {
+        throw FormatException('云端心愿配置第 ${index + 1} 项格式错误');
+      }
+      final map = entry.map((key, value) => MapEntry(key.toString(), value));
+      if ((map['id']?.toString().trim() ?? '').isEmpty) {
+        throw FormatException('云端心愿配置第 ${index + 1} 项缺少 id');
+      }
+      wishes.add(WishEntry.fromJson(map));
+    }
+    return wishes;
   }
 
   List<String> _parseLocations(Object? value) {
     final decoded = _decodeConfig(value);
-    if (decoded is! List) return [];
+    if (decoded == null) return [];
+    if (decoded is! List) throw const FormatException('云端收纳位置配置格式错误');
     return decoded
         .map((entry) => entry.toString().trim())
         .where((entry) => entry.isNotEmpty)

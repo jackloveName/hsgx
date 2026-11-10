@@ -1,127 +1,115 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../widgets.dart';
 
 class HomeAssetSummary extends StatelessWidget {
   const HomeAssetSummary({
     super.key,
     required this.totalValue,
     required this.ownedDailyCost,
-    required this.idleValue,
     required this.totalCount,
     required this.inUseCount,
-    required this.idleCount,
-    required this.isGuest,
+    required this.monthUsageDays,
     required this.onStatusTap,
-    required this.onAccountTap,
+    this.foreignCurrencyItemCount = 0,
   });
 
   final double totalValue;
   final double ownedDailyCost;
-  final double idleValue;
   final int totalCount;
   final int inUseCount;
-  final int idleCount;
-  final bool isGuest;
+  final int monthUsageDays;
   final ValueChanged<String> onStatusTap;
-  final VoidCallback onAccountTap;
+  final int foreignCurrencyItemCount;
 
   @override
   Widget build(BuildContext context) {
-    return GradientCard(
-      colors: const [Color(0xFF4FB79F), Color(0xFF6C99E4)],
-      padding: const EdgeInsets.fromLTRB(22, 18, 22, 17),
+    final usageRate = totalCount == 0 ? 0.0 : inUseCount / totalCount;
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(17, 15, 17, 13),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.94),
+            Color.lerp(primary, Colors.white, 0.92)!,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: appBorder),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF42392D).withValues(alpha: 0.04),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text(
-                '当前估值资产',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const Spacer(),
-              if (!isGuest)
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onAccountTap,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.cloud_done_outlined,
-                            color: Colors.white70,
-                            size: 13,
-                          ),
-                          SizedBox(width: 5),
-                          Text(
-                            '云端同步',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '当前估值',
+                      style: TextStyle(
+                        color: appMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '¥${formatMoney(totalValue, compact: true)}',
+                      style: const TextStyle(
+                        color: appText,
+                        fontFamily: 'Songti SC',
+                        fontSize: 23,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (foreignCurrencyItemCount > 0)
+                      const Text(
+                        '人民币合计 · 外币物品未合并',
+                        style: TextStyle(color: appMuted, fontSize: 8),
+                      ),
+                  ],
                 ),
+              ),
+              Text(
+                '拥有日均 ¥${formatMoney(ownedDailyCost, compact: true)}',
+                style: const TextStyle(color: appMuted, fontSize: 9),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            '¥${formatMoney(totalValue)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 34,
-              height: 1.1,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            idleValue > 0
-                ? '闲置资产 ¥${formatMoney(idleValue, compact: true)} · '
-                      '拥有日均 ¥${formatMoney(ownedDailyCost)}'
-                : '拥有日均 ¥${formatMoney(ownedDailyCost)}',
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
-          ),
-          const SizedBox(height: 18),
-          Container(height: 1, color: Colors.white24),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xFFF0EBE4)),
+          const SizedBox(height: 10),
           Row(
             children: [
               _StatusMetric(
-                label: '全部物品',
-                value: totalCount,
-                color: const Color(0xFF9BC9FF),
+                label: '匣中之物',
+                value: '$totalCount',
+                color: primary,
                 onTap: () => onStatusTap('all'),
               ),
               _StatusMetric(
-                label: '使用中',
-                value: inUseCount,
-                color: const Color(0xFFA8EFE1),
-                onTap: () => onStatusTap('inuse'),
+                label: '本月使用',
+                value: '$monthUsageDays 天',
+                color: primary,
+                onTap: () => onStatusTap('all'),
               ),
               _StatusMetric(
-                label: '闲置',
-                value: idleCount,
-                color: const Color(0xFFFFDF9A),
-                onTap: () => onStatusTap('idle'),
+                label: '使用率',
+                value: '${(usageRate * 100).round()}%',
+                color: primary,
+                onTap: () => onStatusTap('inuse'),
               ),
             ],
           ),
@@ -140,7 +128,7 @@ class _StatusMetric extends StatelessWidget {
   });
 
   final String label;
-  final int value;
+  final String value;
   final Color color;
   final VoidCallback onTap;
 
@@ -153,29 +141,37 @@ class _StatusMetric extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: appMuted, fontSize: 9),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(height: 4),
                 Text(
-                  label,
-                  style: const TextStyle(color: Colors.white70, fontSize: 10),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  '$value',
+                  value,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                    color: appText,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>隐私与协议</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+        background: #f7f4ef;
+        color: #30312d;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: #f7f4ef; }
+      main {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        padding: 28px 20px 48px;
+      }
+      h1 { margin: 0 0 18px; font-size: 24px; }
+      article {
+        min-height: 240px;
+        padding: 22px;
+        border: 1px solid #e9e3da;
+        border-radius: 22px;
+        background: #fff;
+        line-height: 1.8;
+        white-space: pre-wrap;
+      }
+      .status { color: #918c83; }
+      button {
+        margin-top: 18px;
+        min-height: 44px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 14px;
+        background: #3a9d8a;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      button[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title">隐私与协议</h1>
+      <article id="content" class="status">正在加载协议内容…</article>
+      <button id="retry" hidden>重新加载</button>
+    </main>
+    <script>
+      const allowedTypes = new Set(["ZD_PRIVACY_PROTOC", "ZD_REGISTER_PROTOC"]);
+      const params = new URLSearchParams(location.search);
+      const type = allowedTypes.has(params.get("type"))
+        ? params.get("type")
+        : "ZD_PRIVACY_PROTOC";
+      const api = (params.get("api") || "").replace(/\/$/, "");
+      const title = document.getElementById("title");
+      const content = document.getElementById("content");
+      const retry = document.getElementById("retry");
+      title.textContent = type === "ZD_PRIVACY_PROTOC" ? "隐私政策" : "平台注册协议";
+
+      function extract(value, depth = 0) {
+        if (depth > 8 || value == null) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "number" || typeof value === "boolean") return String(value);
+        if (Array.isArray(value)) return value.map((entry) => extract(entry, depth + 1)).filter(Boolean).join("\n");
+        if (typeof value === "object") {
+          for (const key of ["paramValue", "value", "content", "text", "data", "config"]) {
+            if (key in value) {
+              const result = extract(value[key], depth + 1).trim();
+              if (result) return result;
+            }
+          }
+        }
+        return "";
+      }
+
+      function toText(raw) {
+        const holder = document.createElement("textarea");
+        holder.innerHTML = raw
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/(?:p|div|h[1-6]|blockquote|section)>/gi, "\n")
+          .replace(/<li[^>]*>/gi, "\n• ")
+          .replace(/<[^>]+>/g, "");
+        return holder.value.replace(/\n{3,}/g, "\n\n").trim();
+      }
+
+      async function load() {
+        content.className = "status";
+        content.textContent = "正在加载协议内容…";
+        retry.hidden = true;
+        try {
+          const response = await fetch(
+            `${api}/mall_admin/ua/app/sys_config/get/value/config/${encodeURIComponent(type)}`,
+            { headers: { Accept: "application/json" } },
+          );
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          let data = await response.json();
+          if (data && data.code && data.code !== "00000" && data.code !== "200") {
+            throw new Error(data.msg || data.message || data.code);
+          }
+          if (data && data.data !== undefined) data = data.data;
+          const text = toText(extract(data));
+          if (!text) throw new Error("协议内容为空");
+          content.className = "";
+          content.textContent = text;
+        } catch (error) {
+          content.className = "status";
+          content.textContent = `协议内容加载失败：${error.message || "请检查网络后重试"}`;
+          retry.hidden = false;
+        }
+      }
+
+      retry.addEventListener("click", load);
+      load();
+    </script>
+  </body>
+</html>

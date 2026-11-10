@@ -34,6 +34,7 @@ class FilterPillBar<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: height,
       child: ListView.separated(
@@ -49,12 +50,18 @@ class FilterPillBar<T> extends StatelessWidget {
             onSelected: (_) => onChanged(option.value),
             showCheckmark: false,
             side: BorderSide.none,
-            backgroundColor: const Color(0xFFF6F2ED),
+            backgroundColor: Color.lerp(
+              scheme.surface,
+              scheme.onSurface,
+              0.045,
+            ),
             selectedColor: option.backgroundColor,
             label: Text(
               option.label,
               style: TextStyle(
-                color: selected ? option.color : const Color(0xFF918C83),
+                color: selected
+                    ? option.color
+                    : scheme.onSurface.withValues(alpha: 0.52),
                 fontSize: fontSize,
                 fontWeight: FontWeight.w700,
               ),

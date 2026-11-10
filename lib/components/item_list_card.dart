@@ -69,8 +69,8 @@ class ItemListCard extends StatelessWidget {
                     const Spacer(),
                     Text(
                       '${item.currencySymbol}${formatMoney(item.currentTotal, compact: compactValue)}',
-                      style: const TextStyle(
-                        color: Color(0xFF2E7568),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),

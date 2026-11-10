@@ -1,9 +1,9 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_store.dart';
+import '../components/stored_image.dart';
 import '../models.dart';
 import '../services/auth_service.dart';
 import '../storage/local_image_store.dart';
@@ -18,7 +18,9 @@ class ProfileEditScreen extends StatefulWidget {
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _auth = AuthService();
+  final _auth = AuthService(
+    onUnauthorized: AppStore.instance.handleUnauthorized,
+  );
   late final TextEditingController _name;
   late String _avatarPath;
   late String _birthday;
@@ -39,6 +41,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _gender = _genders.contains(store.accountGender)
         ? store.accountGender
         : '未设置';
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _recoverLostAvatar();
+      });
+    }
   }
 
   @override
@@ -54,6 +61,40 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   String widgetInitialAvatar() => AppStore.instance.accountAvatarPath;
+
+  Future<void> _recoverLostAvatar() async {
+    if (!mounted) return;
+    try {
+      final response = await ImagePicker().retrieveLostData();
+      if (response.isEmpty) return;
+      if (response.exception != null) {
+        if (mounted) showAppSnack(context, '上次选择的头像未能恢复，请重新选择');
+        return;
+      }
+      final files = response.files;
+      final file =
+          response.file ??
+          (files != null && files.isNotEmpty ? files.last : null);
+      if (file == null) return;
+      final path = await LocalImageStore.instance.persist(file);
+      final previousNew = _newLocalAvatar;
+      if (!mounted) {
+        await LocalImageStore.instance.delete(path);
+        return;
+      }
+      setState(() {
+        _avatarPath = path;
+        _newLocalAvatar = path;
+      });
+      if (previousNew != null &&
+          previousNew != widgetInitialAvatar() &&
+          previousNew != path) {
+        await LocalImageStore.instance.delete(previousNew);
+      }
+    } on Object {
+      if (mounted) showAppSnack(context, '上次选择的头像未能恢复，请重新选择');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,12 +293,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Future<void> _chooseBirthday() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showAppDatePicker(
+      context,
       initialDate: parseDate(_birthday) ?? DateTime(now.year - 20),
       firstDate: DateTime(1900),
       lastDate: now,
-      helpText: '选择生日',
+      title: '选择生日',
+      confirmLabel: '确定生日',
     );
     if (picked != null) setState(() => _birthday = formatDate(picked));
   }
@@ -285,12 +327,27 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         birthday: _birthday,
         gender: _gender == '未设置' ? '' : _gender,
       );
-      await store.updateAccountProfile(
-        name: _name.text.trim(),
-        avatarPath: avatar,
-        birthday: _birthday,
-        gender: _gender == '未设置' ? '' : _gender,
-      );
+      try {
+        await store.updateAccountProfile(
+          name: _name.text.trim(),
+          avatarPath: avatar,
+          birthday: _birthday,
+          gender: _gender == '未设置' ? '' : _gender,
+        );
+      } catch (_) {
+        try {
+          await _auth.updateUserProfile(
+            token: store.sessionToken,
+            name: store.accountName,
+            avatarPath: store.accountAvatarPath,
+            birthday: store.accountBirthday,
+            gender: store.accountGender,
+          );
+        } on Object {
+          // Preserve the local persistence error as the primary failure.
+        }
+        rethrow;
+      }
       _saved = true;
       if (_newLocalAvatar != null) {
         await LocalImageStore.instance.delete(_newLocalAvatar!);
@@ -317,31 +374,22 @@ class _AvatarImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clean = path.trim();
-    if (clean.startsWith('http://') || clean.startsWith('https://')) {
-      return Image.network(
-        clean,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(),
-      );
-    }
-    if (clean.isNotEmpty) {
-      return Image.file(
-        File(clean),
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(),
-      );
-    }
-    return _fallback();
+    return StoredImage(
+      path: clean,
+      fit: BoxFit.cover,
+      fallback: _fallback(context),
+    );
   }
 
-  Widget _fallback() {
+  Widget _fallback(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return ColoredBox(
-      color: const Color(0xFFE7F6F1),
+      color: Color.lerp(primary, Colors.white, 0.88)!,
       child: Center(
         child: Text(
           fallback,
-          style: const TextStyle(
-            color: Color(0xFF2E7568),
+          style: TextStyle(
+            color: primary,
             fontSize: 34,
             fontWeight: FontWeight.w800,
           ),

@@ -11,6 +11,12 @@ class AppMenuTile extends StatelessWidget {
     this.subtitle,
     this.onTap,
     this.showChevron = true,
+    this.contentPadding = const EdgeInsets.symmetric(vertical: 13),
+    this.titleColor,
+    this.titleWeight = FontWeight.w600,
+    this.iconSize = 18,
+    this.iconBoxSize = 36,
+    this.iconRadius = 11,
   });
 
   final String title;
@@ -21,25 +27,34 @@ class AppMenuTile extends StatelessWidget {
   final String? subtitle;
   final VoidCallback? onTap;
   final bool showChevron;
+  final EdgeInsetsGeometry contentPadding;
+  final Color? titleColor;
+  final FontWeight titleWeight;
+  final double iconSize;
+  final double iconBoxSize;
+  final double iconRadius;
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     final content = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 13),
+      padding: contentPadding,
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: iconBoxSize,
+            height: iconBoxSize,
             decoration: BoxDecoration(
-              color: iconBackground ?? const Color(0xFFF2EFEA),
-              borderRadius: BorderRadius.circular(11),
+              color:
+                  iconBackground ??
+                  Color.lerp(
+                    primary,
+                    Theme.of(context).colorScheme.surface,
+                    0.9,
+                  ),
+              borderRadius: BorderRadius.circular(iconRadius),
             ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: iconColor ?? const Color(0xFF8D8A82),
-            ),
+            child: Icon(icon, size: iconSize, color: iconColor ?? primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -48,9 +63,10 @@ class AppMenuTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
+                    color: titleColor,
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: titleWeight,
                   ),
                 ),
                 if (subtitle != null) ...[

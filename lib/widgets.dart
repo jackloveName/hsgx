@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
-import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'components/stored_image.dart';
 import 'models.dart';
+import 'theme.dart';
 
 class AppBackdrop extends StatelessWidget {
   const AppBackdrop({super.key, required this.child});
@@ -239,30 +240,32 @@ class GradientCard extends StatelessWidget {
   const GradientCard({
     super.key,
     required this.child,
-    this.colors = const [Color(0xFF4EB6A2), Color(0xFF6C9FE8)],
+    this.colors,
     this.padding = const EdgeInsets.all(22),
     this.onTap,
   });
 
   final Widget child;
-  final List<Color> colors;
+  final List<Color>? colors;
   final EdgeInsets padding;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final tokens = AppThemeTokens.of(context);
+    final resolvedColors = colors ?? <Color>[tokens.heroStart, tokens.heroEnd];
     final content = Container(
       padding: padding,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: colors,
+          colors: resolvedColors,
         ),
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: colors.first.withValues(alpha: 0.2),
+            color: resolvedColors.first.withValues(alpha: 0.2),
             blurRadius: 28,
             offset: const Offset(0, 12),
           ),
@@ -296,6 +299,7 @@ class SectionHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: padding,
       child: Row(
@@ -305,10 +309,10 @@ class SectionHeading extends StatelessWidget {
             height: 18,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [appPink, appAmber],
+                colors: [scheme.primary, scheme.secondary],
               ),
             ),
           ),
@@ -393,6 +397,56 @@ class ItemVisual extends StatelessWidget {
   }
 }
 
+class ItemPhoto extends StatelessWidget {
+  const ItemPhoto({
+    super.key,
+    required this.item,
+    required this.height,
+    this.radius = 16,
+    this.fit = BoxFit.cover,
+  });
+
+  final InventoryItem item;
+  final double height;
+  final double radius;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = item.imagePath;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: ColoredBox(
+          color: item.categoryInfo.softColor,
+          child: image.isNotEmpty
+              ? _LocalOrAssetImage(
+                  path: image,
+                  fit: fit,
+                  fallbackAsset: item.categoryInfo.asset,
+                  cacheWidth:
+                      (MediaQuery.sizeOf(context).width *
+                              MediaQuery.devicePixelRatioOf(context) *
+                              0.55)
+                          .round(),
+                )
+              : Padding(
+                  padding: EdgeInsets.all(
+                    math.min(28.0, height * 0.2).toDouble(),
+                  ),
+                  child: Image.asset(
+                    item.categoryInfo.asset,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LocalOrAssetImage extends StatelessWidget {
   const _LocalOrAssetImage({
     required this.path,
@@ -408,41 +462,12 @@ class _LocalOrAssetImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return Image.network(
-        path,
-        fit: fit,
-        cacheWidth: cacheWidth,
-        errorBuilder: (_, _, _) =>
-            Image.asset(fallbackAsset, fit: BoxFit.contain),
-      );
-    }
-    if (kIsWeb) {
-      if (path.startsWith('blob:')) {
-        return Image.network(
-          path,
-          fit: fit,
-          cacheWidth: cacheWidth,
-          errorBuilder: (_, _, _) =>
-              Image.asset(fallbackAsset, fit: BoxFit.contain),
-        );
-      }
-      return Image.asset(fallbackAsset, fit: BoxFit.contain);
-    }
-    final localFile = File(path);
-    if (localFile.existsSync()) {
-      return Image.file(
-        localFile,
-        fit: fit,
-        cacheWidth: cacheWidth,
-        errorBuilder: (_, _, _) =>
-            Image.asset(fallbackAsset, fit: BoxFit.contain),
-      );
-    }
-    if (path.startsWith('assets/') || path.startsWith('static/')) {
-      return Image.asset(path, fit: fit);
-    }
-    return Image.asset(fallbackAsset, fit: BoxFit.contain);
+    return StoredImage(
+      path: path,
+      fit: fit,
+      cacheWidth: cacheWidth,
+      fallback: Image.asset(fallbackAsset, fit: BoxFit.contain),
+    );
   }
 }
 
@@ -835,10 +860,159 @@ class MiniMetric extends StatelessWidget {
   }
 }
 
+OverlayEntry? _activeTopNotice;
+
 void showAppSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  if (!context.mounted) return;
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+
+  final previous = _activeTopNotice;
+  if (previous?.mounted ?? false) previous!.remove();
+
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (overlayContext) => _TopAppNotice(
+      message: message,
+      onDismissed: () {
+        if (_activeTopNotice == entry) _activeTopNotice = null;
+        if (entry.mounted) entry.remove();
+      },
+    ),
+  );
+  _activeTopNotice = entry;
+  overlay.insert(entry);
+}
+
+class _TopAppNotice extends StatefulWidget {
+  const _TopAppNotice({required this.message, required this.onDismissed});
+
+  final String message;
+  final VoidCallback onDismissed;
+
+  @override
+  State<_TopAppNotice> createState() => _TopAppNoticeState();
+}
+
+class _TopAppNoticeState extends State<_TopAppNotice>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+  Timer? _dismissTimer;
+  bool _closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+    _dismissTimer = Timer(const Duration(milliseconds: 2800), _dismiss);
+  }
+
+  Future<void> _dismiss() async {
+    if (_closing || !mounted) return;
+    _closing = true;
+    await _controller.reverse();
+    if (mounted) widget.onDismissed();
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: SafeArea(
+          bottom: false,
+          minimum: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.28),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: FadeTransition(
+                  opacity: curved,
+                  child: Material(
+                    key: const Key('top-app-notice'),
+                    color: Colors.transparent,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(13, 11, 15, 11),
+                      decoration: BoxDecoration(
+                        color: scheme.surface.withValues(alpha: 0.98),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.24),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: scheme.shadow.withValues(alpha: 0.14),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.11),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Icon(
+                              Icons.info_outline_rounded,
+                              color: scheme.primary,
+                              size: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                widget.message,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: scheme.onSurface,
+                                  fontSize: 12,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 Future<bool> runStoreAction(
@@ -884,7 +1058,7 @@ Future<bool> confirmAction(
               style: FilledButton.styleFrom(
                 backgroundColor: destructive
                     ? const Color(0xFFC6657D)
-                    : appPrimary,
+                    : Theme.of(context).colorScheme.primary,
               ),
               onPressed: () => Navigator.pop(context, true),
               child: Text(confirmLabel),
@@ -893,4 +1067,146 @@ Future<bool> confirmAction(
         ),
       ) ??
       false;
+}
+
+Future<DateTime?> showAppDatePicker(
+  BuildContext context, {
+  required DateTime initialDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  String title = '选择日期',
+  String confirmLabel = '确定',
+}) {
+  var initial = initialDate;
+  if (initial.isBefore(firstDate)) initial = firstDate;
+  if (initial.isAfter(lastDate)) initial = lastDate;
+  return showModalBottomSheet<DateTime>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _BottomDatePickerSheet(
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      title: title,
+      confirmLabel: confirmLabel,
+    ),
+  );
+}
+
+class _BottomDatePickerSheet extends StatefulWidget {
+  const _BottomDatePickerSheet({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+    required this.title,
+    required this.confirmLabel,
+  });
+
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final String title;
+  final String confirmLabel;
+
+  @override
+  State<_BottomDatePickerSheet> createState() => _BottomDatePickerSheetState();
+}
+
+class _BottomDatePickerSheetState extends State<_BottomDatePickerSheet> {
+  late DateTime _selectedDate = widget.initialDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0DCD5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _formatChineseDate(_selectedDate),
+                      style: TextStyle(
+                        color: primary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                child: CalendarDatePicker(
+                  initialDate: widget.initialDate,
+                  firstDate: widget.firstDate,
+                  lastDate: widget.lastDate,
+                  currentDate: DateTime.now(),
+                  onDateChanged: (date) {
+                    setState(() => _selectedDate = date);
+                  },
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: PrimaryButton(
+                label: widget.confirmLabel,
+                icon: Icons.check_rounded,
+                onPressed: () => Navigator.pop(context, _selectedDate),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatChineseDate(DateTime date) {
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    return '${date.year}年${date.month}月${date.day}日 '
+        '星期${weekdays[date.weekday - 1]}';
+  }
 }

@@ -44,6 +44,7 @@ void main() {
     final body = jsonDecode(client.lastRequest!.body) as Map;
     expect(body['loginStatus'], 2);
     expect(body['userName'], '13800138000');
+    expect(body['appBrand'], '花拾归匣');
 
     final decrypter = crypto.Encrypter(
       crypto.AES(

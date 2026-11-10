@@ -21,8 +21,8 @@ HomeInsight buildHomeInsight(
   List<WishEntry> wishlist, {
   DateTime? now,
 }) {
-  final today = DateTime.now();
-  final current = now ?? today;
+  final current = now ?? DateTime.now();
+  final currentDay = DateTime(current.year, current.month, current.day);
   final active = items
       .where(
         (item) => const ['inuse', 'idle', 'repairing'].contains(item.status),
@@ -72,8 +72,11 @@ HomeInsight buildHomeInsight(
     );
   }
 
-  final idle = active.where((item) => item.status == 'idle').toList()
-    ..sort((a, b) => b.idleDays.compareTo(a.idleDays));
+  final idle =
+      active
+          .where((item) => item.status == 'idle' && !item.hasRecoveryPlan)
+          .toList()
+        ..sort((a, b) => b.idleDays.compareTo(a.idleDays));
   if (idle.isNotEmpty && idle.first.idleDays >= 90) {
     final item = idle.first;
     return HomeInsight(
@@ -105,9 +108,18 @@ HomeInsight buildHomeInsight(
           .where(
             (item) =>
                 item.usageMode == 'manual' &&
-                item.ownedDays >= 45 &&
+                item.ownedDaysAsOf(current) >= 45 &&
                 (item.lastUsedAt == null ||
-                    current.difference(item.lastUsedAt!).inDays >= 60),
+                    currentDay
+                            .difference(
+                              DateTime(
+                                item.lastUsedAt!.year,
+                                item.lastUsedAt!.month,
+                                item.lastUsedAt!.day,
+                              ),
+                            )
+                            .inDays >=
+                        60),
           )
           .toList()
         ..sort((a, b) => b.currentTotal.compareTo(a.currentTotal));
@@ -118,7 +130,7 @@ HomeInsight buildHomeInsight(
       title: '这件高价值物品很久没使用了',
       message: item.lastUsedAt == null
           ? '${item.name} 还没有使用记录，今天可以重新拿起，或评估是否继续保留。'
-          : '${item.name} 已有 ${current.difference(item.lastUsedAt!).inDays} 天没有使用。',
+          : '${item.name} 已有 ${currentDay.difference(DateTime(item.lastUsedAt!.year, item.lastUsedAt!.month, item.lastUsedAt!.day)).inDays} 天没有使用。',
       action: 'detail',
       itemId: item.id,
     );
@@ -131,7 +143,9 @@ HomeInsight buildHomeInsight(
     return HomeInsight(
       type: 'positive',
       title: '你的生活正在被好好使用',
-      message: '${item.name} 已累计使用 ${item.usageDays} 天或次，是收藏匣里的高频伙伴。',
+      message: item.usageMode == 'manual'
+          ? '${item.name} 已记录使用 ${item.usageDays} 次，是收藏匣里的高频伙伴。'
+          : '${item.name} 已累计使用 ${item.usageDays} 天，是收藏匣里的高频伙伴。',
       action: 'detail',
       itemId: item.id,
     );

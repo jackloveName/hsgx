@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_store.dart';
+import '../components/info_row.dart';
+import '../components/item_image_carousel.dart';
 import '../models.dart';
 import '../storage/local_image_store.dart';
 import '../widgets.dart';
@@ -24,7 +25,7 @@ class ItemDetailScreen extends StatelessWidget {
         final item = AppStore.instance.itemById(itemId);
         if (item == null) {
           return PageFrame(
-            title: '物品详情',
+            title: '一物一页',
             child: EmptyState(
               title: '未找到这件物品',
               description: '它可能已经被删除。',
@@ -40,22 +41,30 @@ class ItemDetailScreen extends StatelessWidget {
         final relatedItems = AppStore.instance.items
             .where((candidate) => item.relatedItemIds.contains(candidate.id))
             .toList();
+        final relatedCostItems = relatedItems
+            .where(
+              (candidate) =>
+                  candidate.purchaseCurrency.toUpperCase() ==
+                  item.purchaseCurrency.toUpperCase(),
+            )
+            .toList();
         final relatedUsageDaily = [
           item,
-          ...relatedItems,
+          ...relatedCostItems,
         ].fold<double>(0, (sum, entry) => sum + entry.usageDailyCost);
         final relatedOwnedDaily = [
           item,
-          ...relatedItems,
+          ...relatedCostItems,
         ].fold<double>(0, (sum, entry) => sum + entry.ownedDailyCost);
         return PageFrame(
-          title: '物品详情',
+          title: '一物一页',
+          padding: const EdgeInsets.only(top: 8, bottom: 36),
           action: IconButton(
             tooltip: item.favorite ? '取消收藏' : '加入收藏',
             onPressed: () => runStoreAction(
               context,
               () => AppStore.instance.toggleFavorite(item.id),
-              successMessage: item.favorite ? '已取消收藏' : '已加入收藏馆',
+              successMessage: item.favorite ? '已移出珍爱' : '已放入珍爱',
             ),
             icon: Icon(
               item.favorite
@@ -67,425 +76,531 @@ class ItemDetailScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                height: 230,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [category.softColor, Colors.white],
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: category.color.withValues(alpha: 0.15),
-                  ),
-                ),
-                child: _ItemGallery(item: item),
-              ),
-              const SizedBox(height: 16),
-              SoftCard(
+              ItemImageCarousel(item: item),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.name,
-                            style: const TextStyle(
-                              fontFamily: 'Songti SC',
-                              fontSize: 27,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        StatusPill(status: item.statusInfo),
-                      ],
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      [
-                        category.name,
-                        if (item.subcategory.isNotEmpty) item.subcategory,
-                        if (item.storageLocation.isNotEmpty)
-                          item.storageLocation,
-                      ].join(' · '),
-                      style: const TextStyle(color: appMuted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(height: 1, color: appBorder),
-                    const SizedBox(height: 17),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MiniMetric(
-                            label: '购入价',
-                            value:
-                                '${item.currencySymbol}${formatMoney(item.purchasePrice)}',
-                          ),
-                        ),
-                        Expanded(
-                          child: MiniMetric(
-                            label: '当前估值',
-                            value:
-                                '${item.currencySymbol}${formatMoney(item.currentValue)}',
-                          ),
-                        ),
-                        Expanded(
-                          child: MiniMetric(
-                            label: item.usageMode == 'manual' ? '使用次数' : '使用天数',
-                            value:
-                                '${item.usageDays}${item.usageMode == "manual" ? " 次" : " 天"}',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SectionHeading(title: '使用成本'),
-              SoftCard(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MiniMetric(
-                            label: item.usageMode == 'manual' ? '使用次均' : '使用日均',
-                            value:
-                                '${item.currencySymbol}${formatMoney(item.usageDailyCost)}',
-                          ),
-                        ),
-                        Expanded(
-                          child: MiniMetric(
-                            label: '拥有日均',
-                            value:
-                                '${item.currencySymbol}${formatMoney(item.ownedDailyCost)}',
-                          ),
-                        ),
-                        Expanded(
-                          child: MiniMetric(
-                            label: '已拥有',
-                            value: '${item.ownedDays} 天',
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (item.effectiveTargetDays > 0) ...[
-                      const SizedBox(height: 18),
-                      Row(
+                    const SizedBox(height: 16),
+                    SoftCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            '目标使用进度',
-                            style: TextStyle(color: appMuted, fontSize: 11),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${item.usageDays} / ${item.effectiveTargetDays} 天',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: LinearProgressIndicator(
-                          minHeight: 7,
-                          value: (item.usageDays / item.effectiveTargetDays)
-                              .clamp(0, 1),
-                          backgroundColor: const Color(0xFFF1EEE9),
-                          color: appPrimary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SectionHeading(title: '最近 7 天成本趋势'),
-              _CostTrendCard(item: item),
-              const SectionHeading(title: '物品信息'),
-              SoftCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  children: [
-                    _DetailRow(label: '购入日期', value: item.purchaseDate),
-                    _DetailRow(
-                      label: '购入数量',
-                      value: '${item.quantity.toInt()}',
-                    ),
-                    _DetailRow(
-                      label: '购买渠道',
-                      value: item.purchaseChannel.isEmpty
-                          ? '--'
-                          : item.purchaseChannel,
-                    ),
-                    _DetailRow(
-                      label: '收纳位置',
-                      value: item.storageLocation.isEmpty
-                          ? '--'
-                          : item.storageLocation,
-                    ),
-                    _DetailRow(
-                      label: '保修/质期',
-                      value: item.warrantyPeriod.isEmpty
-                          ? '--'
-                          : item.warrantyPeriod == '其他'
-                          ? item.warrantyEndDate
-                          : item.warrantyPeriod,
-                    ),
-                    if (item.netWeight.isNotEmpty)
-                      _DetailRow(label: '净含量/克重', value: item.netWeight),
-                    if (item.remainingNetWeight.isNotEmpty)
-                      _DetailRow(label: '剩余量', value: item.remainingNetWeight),
-                    _DetailRow(
-                      label: '标签',
-                      value: item.tags.isEmpty ? '--' : item.tags.join(' · '),
-                    ),
-                    _DetailRow(
-                      label: '备注',
-                      value: item.note.isEmpty ? '--' : item.note,
-                      multiline: true,
-                    ),
-                  ],
-                ),
-              ),
-              if (item.status == 'idle' && item.idleReason.isNotEmpty) ...[
-                const SectionHeading(title: '闲置记录'),
-                SoftCard(
-                  child: _DetailRow(label: '闲置原因', value: item.idleReason),
-                ),
-              ],
-              if (item.status == 'repairing') ...[
-                const SectionHeading(title: '维修记录'),
-                SoftCard(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Column(
-                    children: [
-                      _DetailRow(
-                        label: '维修平台',
-                        value: item.repairPlatform.isEmpty
-                            ? '--'
-                            : item.repairPlatform,
-                      ),
-                      if (item.repairDays > 0)
-                        _DetailRow(
-                          label: '预计天数',
-                          value: '${item.repairDays} 天',
-                        ),
-                      if (item.repairContactName.isNotEmpty)
-                        _DetailRow(label: '联系人', value: item.repairContactName),
-                      if (item.repairContactPhone.isNotEmpty)
-                        _DetailRow(
-                          label: '联系电话',
-                          value: item.repairContactPhone,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              const SectionHeading(title: '组合关系'),
-              SoftCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE7F6F1),
-                            borderRadius: BorderRadius.circular(13),
-                          ),
-                          child: const Icon(
-                            Icons.hub_outlined,
-                            color: Color(0xFF2E7568),
-                            size: 21,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            relatedItems.isEmpty
-                                ? '还没有关联物品'
-                                : '已关联 ${relatedItems.length} 件物品',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: item.status == 'retired'
-                              ? null
-                              : () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        ItemRelationsScreen(itemId: item.id),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.name,
+                                  style: const TextStyle(
+                                    fontFamily: 'Songti SC',
+                                    fontSize: 27,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                          child: const Text('管理'),
+                              ),
+                              StatusPill(status: item.statusInfo),
+                            ],
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            [
+                              category.name,
+                              if (item.subcategory.isNotEmpty) item.subcategory,
+                              if (item.storageLocation.isNotEmpty)
+                                item.storageLocation,
+                            ].join(' · '),
+                            style: const TextStyle(
+                              color: appMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Container(height: 1, color: appBorder),
+                          const SizedBox(height: 17),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: MiniMetric(
+                                  label: '购入价',
+                                  value:
+                                      '${item.currencySymbol}${formatMoney(item.purchasePrice)}',
+                                ),
+                              ),
+                              Expanded(
+                                child: MiniMetric(
+                                  label: '当前估值',
+                                  value:
+                                      '${item.currencySymbol}${formatMoney(item.currentValue)}',
+                                ),
+                              ),
+                              Expanded(
+                                child: MiniMetric(
+                                  label: item.usageMode == 'manual'
+                                      ? '使用次数'
+                                      : '使用天数',
+                                  value:
+                                      '${item.usageDays}${item.usageMode == "manual" ? " 次" : " 天"}',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SectionHeading(title: '它与你的日常'),
+                    SoftCard(
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: MiniMetric(
+                                  label: item.usageMode == 'manual'
+                                      ? '使用次均'
+                                      : '使用日均',
+                                  value:
+                                      '${item.currencySymbol}${formatMoney(item.usageDailyCost)}',
+                                ),
+                              ),
+                              Expanded(
+                                child: MiniMetric(
+                                  label: '拥有日均',
+                                  value:
+                                      '${item.currencySymbol}${formatMoney(item.ownedDailyCost)}',
+                                ),
+                              ),
+                              Expanded(
+                                child: MiniMetric(
+                                  label: '已拥有',
+                                  value: '${item.ownedDays} 天',
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item.effectiveTargetDays > 0) ...[
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Text(
+                                  item.usageMode == 'manual'
+                                      ? '目标次数进度'
+                                      : '目标使用进度',
+                                  style: const TextStyle(
+                                    color: appMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '${item.usageDays} / ${item.effectiveTargetDays} '
+                                  '${item.usageMode == 'manual' ? '次' : '天'}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: LinearProgressIndicator(
+                                minHeight: 7,
+                                value:
+                                    (item.usageDays / item.effectiveTargetDays)
+                                        .clamp(0, 1),
+                                backgroundColor: const Color(0xFFF1EEE9),
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SectionHeading(title: '最近的使用光景'),
+                    _CostTrendCard(item: item),
+                    if (item.hasRecoveryPlan) ...[
+                      const SectionHeading(title: '惜物计划'),
+                      SoftCard(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Column(
+                          children: [
+                            _DetailRow(
+                              label: '处理方式',
+                              value: item.recoveryMethod,
+                            ),
+                            if (item.recoveryTargetPrice > 0)
+                              _DetailRow(
+                                label: '目标回血',
+                                value:
+                                    '${item.currencySymbol}${formatMoney(item.recoveryTargetPrice)}',
+                              ),
+                            if (item.recoveryDeadline.isNotEmpty)
+                              _DetailRow(
+                                label: '计划日期',
+                                value: item.recoveryDeadline,
+                              ),
+                            if (item.recoveryPlatform.isNotEmpty)
+                              _DetailRow(
+                                label: '计划平台',
+                                value: item.recoveryPlatform,
+                              ),
+                            if (item.recoveryContact.isNotEmpty)
+                              _DetailRow(
+                                label: '接收人',
+                                value: item.recoveryContact,
+                              ),
+                            if (item.recoveryNote.isNotEmpty)
+                              _DetailRow(
+                                label: '计划备注',
+                                value: item.recoveryNote,
+                                multiline: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SectionHeading(title: '拾物笺'),
+                    SoftCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Column(
+                        children: [
+                          _DetailRow(label: '购入日期', value: item.purchaseDate),
+                          _DetailRow(
+                            label: '购入数量',
+                            value: '${item.quantity.toInt()}',
+                          ),
+                          _DetailRow(
+                            label: '购买渠道',
+                            value: item.purchaseChannel.isEmpty
+                                ? '--'
+                                : item.purchaseChannel,
+                          ),
+                          _DetailRow(
+                            label: '收纳位置',
+                            value: item.storageLocation.isEmpty
+                                ? '--'
+                                : item.storageLocation,
+                          ),
+                          _DetailRow(
+                            label: '保修/质期',
+                            value: item.warrantyPeriod.isEmpty
+                                ? '--'
+                                : item.warrantyPeriod == '其他'
+                                ? item.warrantyEndDate
+                                : item.warrantyPeriod,
+                          ),
+                          if (item.netWeight.isNotEmpty)
+                            _DetailRow(label: '净含量/克重', value: item.netWeight),
+                          if (item.remainingNetWeight.isNotEmpty)
+                            _DetailRow(
+                              label: '剩余量',
+                              value: item.remainingNetWeight,
+                            ),
+                          _DetailRow(
+                            label: '标签',
+                            value: item.tags.isEmpty
+                                ? '--'
+                                : item.tags.join(' · '),
+                          ),
+                          _DetailRow(
+                            label: '备注',
+                            value: item.note.isEmpty ? '--' : item.note,
+                            multiline: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (item.status == 'idle' &&
+                        item.idleReason.isNotEmpty) ...[
+                      const SectionHeading(title: '暂歇记录'),
+                      SoftCard(
+                        child: _DetailRow(
+                          label: '闲置原因',
+                          value: item.idleReason,
+                        ),
+                      ),
+                    ],
+                    if (item.status == 'repairing') ...[
+                      const SectionHeading(title: '养护记录'),
+                      SoftCard(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Column(
+                          children: [
+                            _DetailRow(
+                              label: '维修平台',
+                              value: item.repairPlatform.isEmpty
+                                  ? '--'
+                                  : item.repairPlatform,
+                            ),
+                            if (item.repairDays > 0)
+                              _DetailRow(
+                                label: '预计天数',
+                                value: '${item.repairDays} 天',
+                              ),
+                            if (item.repairContactName.isNotEmpty)
+                              _DetailRow(
+                                label: '联系人',
+                                value: item.repairContactName,
+                              ),
+                            if (item.repairContactPhone.isNotEmpty)
+                              _DetailRow(
+                                label: '联系电话',
+                                value: item.repairContactPhone,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SectionHeading(title: '相伴之物'),
+                    SoftCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: Color.lerp(
+                                    Theme.of(context).colorScheme.primary,
+                                    Colors.white,
+                                    0.88,
+                                  ),
+                                  borderRadius: BorderRadius.circular(13),
+                                ),
+                                child: Icon(
+                                  Icons.hub_outlined,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 21,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  relatedItems.isEmpty
+                                      ? '还没有关联物品'
+                                      : '已关联 ${relatedItems.length} 件物品',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: item.status == 'retired'
+                                    ? null
+                                    : () => Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => ItemRelationsScreen(
+                                            itemId: item.id,
+                                          ),
+                                        ),
+                                      ),
+                                child: const Text('管理'),
+                              ),
+                            ],
+                          ),
+                          if (relatedItems.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: MiniMetric(
+                                    label: '组合使用日均',
+                                    value:
+                                        '${item.currencySymbol}${formatMoney(relatedUsageDaily)}',
+                                  ),
+                                ),
+                                Expanded(
+                                  child: MiniMetric(
+                                    label: '组合拥有日均',
+                                    value:
+                                        '${item.currencySymbol}${formatMoney(relatedOwnedDaily)}',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 7,
+                              runSpacing: 7,
+                              children: [
+                                for (final related in relatedItems)
+                                  ActionChip(
+                                    avatar: const Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 14,
+                                    ),
+                                    label: Text(related.name),
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => ItemDetailScreen(
+                                          itemId: related.id,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (item.status == 'processed' &&
+                        item.disposalMethod.isNotEmpty) ...[
+                      const SectionHeading(title: '离匣记录'),
+                      SoftCard(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Column(
+                          children: [
+                            _DetailRow(
+                              label: '处理方式',
+                              value: item.disposalMethod,
+                            ),
+                            if (item.disposalPlatform.isNotEmpty)
+                              _DetailRow(
+                                label: switch (item.disposalMethod) {
+                                  '回收' => '回收平台',
+                                  _ => '转卖平台',
+                                },
+                                value: item.disposalPlatform,
+                              ),
+                            if (item.disposalContact.isNotEmpty)
+                              _DetailRow(
+                                label: item.disposalMethod == '转赠'
+                                    ? '接收人'
+                                    : '转卖人',
+                                value: item.disposalContact,
+                              ),
+                            if (item.disposalPlatform.isEmpty &&
+                                item.disposalDetail.isNotEmpty)
+                              _DetailRow(
+                                label: item.disposalMethod == '转赠'
+                                    ? '接收人'
+                                    : '处理说明',
+                                value: item.disposalDetail,
+                              ),
+                            if (item.isCashRecovery && item.disposalPrice > 0)
+                              _DetailRow(
+                                label: '净回血',
+                                value:
+                                    '${item.currencySymbol}${formatMoney(item.cashRecoveredAmount)}',
+                              ),
+                            if (item.isCashRecovery && item.disposalCost > 0)
+                              _DetailRow(
+                                label: '处理成本',
+                                value:
+                                    '${item.currencySymbol}${formatMoney(item.disposalCost)}',
+                              ),
+                            _DetailRow(
+                              label: '处理日期',
+                              value: item.processDate.isEmpty
+                                  ? '--'
+                                  : item.processDate,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SectionHeading(title: '它的生命轨迹'),
+                    _StatusTimeline(item: item),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: item.status == 'processed'
+                                ? null
+                                : () => _changeStatus(context, item),
+                            icon: const Icon(
+                              Icons.swap_horiz_rounded,
+                              size: 18,
+                            ),
+                            label: const Text('更改状态'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Color.lerp(
+                                Theme.of(context).colorScheme.primary,
+                                Colors.white,
+                                0.88,
+                              ),
+                              foregroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary,
+                              minimumSize: const Size(0, 50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: item.status == 'processed'
+                                ? null
+                                : () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            ItemFormScreen(initial: item),
+                                      ),
+                                    );
+                                  },
+                            icon: const Icon(Icons.edit_outlined, size: 17),
+                            label: const Text('编辑'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    if (relatedItems.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: MiniMetric(
-                              label: '组合使用日均',
-                              value:
-                                  '${item.currencySymbol}${formatMoney(relatedUsageDaily)}',
-                            ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        key: const Key('delete-item-button'),
+                        onPressed: () => _delete(context, item),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48),
+                          foregroundColor: const Color(0xFFC6657D),
+                          backgroundColor: const Color(0xFFFCEBEF),
+                          side: const BorderSide(color: Color(0xFFF1CFD7)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          Expanded(
-                            child: MiniMetric(
-                              label: '组合拥有日均',
-                              value:
-                                  '${item.currencySymbol}${formatMoney(relatedOwnedDaily)}',
-                            ),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
+                        ),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                        ),
+                        label: const Text('删除这件物品'),
                       ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
-                        children: [
-                          for (final related in relatedItems)
-                            ActionChip(
-                              avatar: const Icon(
-                                Icons.inventory_2_outlined,
-                                size: 14,
-                              ),
-                              label: Text(related.name),
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      ItemDetailScreen(itemId: related.id),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ],
-                ),
-              ),
-              if (item.status == 'processed' &&
-                  item.disposalMethod.isNotEmpty) ...[
-                const SectionHeading(title: '处理记录'),
-                SoftCard(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Column(
-                    children: [
-                      _DetailRow(label: '处理方式', value: item.disposalMethod),
-                      if (item.disposalPlatform.isNotEmpty)
-                        _DetailRow(
-                          label: switch (item.disposalMethod) {
-                            '回收' => '回收平台',
-                            _ => '转卖平台',
-                          },
-                          value: item.disposalPlatform,
-                        ),
-                      if (item.disposalContact.isNotEmpty)
-                        _DetailRow(
-                          label: item.disposalMethod == '转赠' ? '接收人' : '转卖人',
-                          value: item.disposalContact,
-                        ),
-                      if (item.disposalPlatform.isEmpty &&
-                          item.disposalDetail.isNotEmpty)
-                        _DetailRow(
-                          label: item.disposalMethod == '转赠' ? '接收人' : '处理说明',
-                          value: item.disposalDetail,
-                        ),
-                      if (item.disposalPrice > 0)
-                        _DetailRow(
-                          label: '回血金额',
-                          value:
-                              '${item.currencySymbol}${formatMoney(item.disposalPrice)}',
-                        ),
-                      _DetailRow(
-                        label: '处理日期',
-                        value: item.processDate.isEmpty
-                            ? '--'
-                            : item.processDate,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SectionHeading(title: '状态轨迹'),
-              _StatusTimeline(item: item),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed: item.status == 'processed'
-                          ? null
-                          : () => _changeStatus(context, item),
-                      icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                      label: const Text('更改状态'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFE7F6F1),
-                        foregroundColor: const Color(0xFF2E7568),
-                        minimumSize: const Size(0, 50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: item.status == 'processed'
-                          ? null
-                          : () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => ItemFormScreen(initial: item),
-                                ),
-                              );
-                            },
-                      icon: const Icon(Icons.edit_outlined, size: 17),
-                      label: const Text('编辑'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextButton.icon(
-                onPressed: () => _delete(context, item),
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Color(0xFFC6657D),
-                ),
-                label: const Text(
-                  '删除这件物品',
-                  style: TextStyle(color: Color(0xFFC6657D)),
                 ),
               ),
             ],
@@ -519,6 +634,7 @@ class ItemDetailScreen extends StatelessWidget {
         disposalPlatform: selection.disposalPlatform,
         disposalContact: selection.disposalContact,
         disposalPrice: selection.price,
+        disposalCost: selection.cost,
         processDate: selection.processDate,
       ),
       successMessage: '状态已更新为${statusById(selection.status).name}',
@@ -567,12 +683,12 @@ class _CostTrendCard extends StatelessWidget {
       final usageDays = item.usageDaysAsOf(date);
       return (
         label: '${date.month}/${date.day}',
-        owned: ownedDays <= 0 ? 0.0 : item.purchasePrice / ownedDays,
+        owned: ownedDays <= 0 ? 0.0 : item.purchaseTotal / ownedDays,
         usage: item.usageMode == 'manual'
             ? item.usageDailyCost
             : usageDays <= 0
             ? 0.0
-            : item.purchasePrice / usageDays,
+            : item.purchaseTotal / usageDays,
         target: item.targetDailyCost,
       );
     });
@@ -721,124 +837,6 @@ class _CostTrendPainter extends CustomPainter {
   }
 }
 
-class _ItemGallery extends StatefulWidget {
-  const _ItemGallery({required this.item});
-
-  final InventoryItem item;
-
-  @override
-  State<_ItemGallery> createState() => _ItemGalleryState();
-}
-
-class _ItemGalleryState extends State<_ItemGallery> {
-  int _index = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final images = widget.item.imagePaths;
-    if (images.isEmpty) {
-      return Center(
-        child: ItemVisual(item: widget.item, size: 160, radius: 28),
-      );
-    }
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: PageView.builder(
-            itemCount: images.length,
-            onPageChanged: (value) => setState(() => _index = value),
-            itemBuilder: (context, index) => GestureDetector(
-              onTap: () => _preview(images, index),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: _GalleryImage(path: images[index]),
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (images.length > 1)
-          Positioned(
-            right: 22,
-            bottom: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_index + 1} / ${images.length}',
-                style: const TextStyle(color: Colors.white, fontSize: 10),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _preview(List<String> images, int initialIndex) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black,
-      builder: (context) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: PageController(initialPage: initialIndex),
-              itemCount: images.length,
-              itemBuilder: (context, index) => InteractiveViewer(
-                minScale: 1,
-                maxScale: 4,
-                child: Center(child: _GalleryImage(path: images[index])),
-              ),
-            ),
-            Positioned(
-              right: 14,
-              top: MediaQuery.paddingOf(context).top + 10,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GalleryImage extends StatelessWidget {
-  const _GalleryImage({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    if (path.startsWith('http://') ||
-        path.startsWith('https://') ||
-        path.startsWith('blob:')) {
-      return Image.network(
-        path,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      );
-    }
-    return Image.file(
-      File(path),
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-    );
-  }
-}
-
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
@@ -852,30 +850,7 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      child: Row(
-        crossAxisAlignment: multiline
-            ? CrossAxisAlignment.start
-            : CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 92,
-            child: Text(
-              label,
-              style: const TextStyle(color: appMuted, fontSize: 12),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 12, height: 1.55),
-            ),
-          ),
-        ],
-      ),
-    );
+    return InfoRow(label: label, value: value, multiline: multiline);
   }
 }
 
@@ -973,11 +948,15 @@ class _StatusSheet extends StatefulWidget {
 
 class _StatusSheetState extends State<_StatusSheet> {
   late String _status = widget.item.status == 'inuse' ? 'idle' : 'inuse';
-  late String _method = widget.item.disposalMethod.isEmpty
+  late String _method = widget.item.recoveryMethod.isNotEmpty
+      ? widget.item.recoveryMethod
+      : widget.item.disposalMethod.isEmpty
       ? '转卖'
       : widget.item.disposalMethod;
   late String _repairPlatform = widget.item.repairPlatform;
-  late String _disposalPlatform = widget.item.disposalPlatform;
+  late String _disposalPlatform = widget.item.recoveryPlatform.isNotEmpty
+      ? widget.item.recoveryPlatform
+      : widget.item.disposalPlatform;
   late String _processDate = widget.item.processDate.isEmpty
       ? formatDate(DateTime.now())
       : widget.item.processDate;
@@ -986,6 +965,7 @@ class _StatusSheetState extends State<_StatusSheet> {
   final _repairName = TextEditingController();
   final _repairPhone = TextEditingController();
   final _price = TextEditingController();
+  final _cost = TextEditingController();
   final _detail = TextEditingController();
 
   static const _repairPlatforms = ['品牌官方', '官方授权维修', '第三方维修', '个人维修', '其他'];
@@ -1001,10 +981,22 @@ class _StatusSheetState extends State<_StatusSheet> {
         : '';
     _repairName.text = widget.item.repairContactName;
     _repairPhone.text = widget.item.repairContactPhone;
-    _price.text = widget.item.disposalPrice > 0
-        ? formatMoney(widget.item.disposalPrice)
+    final recoveryTarget = widget.item.recoveryTargetPrice;
+    final displayPrice = widget.item.disposalPrice > 0
+        ? widget.item.disposalPrice
+        : recoveryTarget;
+    _price.text = displayPrice > 0 ? formatMoney(displayPrice) : '';
+    _cost.text = widget.item.disposalCost > 0
+        ? formatMoney(widget.item.disposalCost)
         : '';
-    final existingDetail = widget.item.disposalMethod == '转赠'
+    final existingDetail =
+        widget.item.recoveryContact.isNotEmpty ||
+            widget.item.recoveryPlatform.isNotEmpty
+        ? [
+            widget.item.recoveryContact,
+            widget.item.recoveryPlatform,
+          ].where((value) => value.isNotEmpty).join(' · ')
+        : widget.item.disposalMethod == '转赠'
         ? widget.item.disposalContact
         : widget.item.disposalDetail;
     _detail.text = existingDetail;
@@ -1017,6 +1009,7 @@ class _StatusSheetState extends State<_StatusSheet> {
     _repairName.dispose();
     _repairPhone.dispose();
     _price.dispose();
+    _cost.dispose();
     _detail.dispose();
     super.dispose();
   }
@@ -1193,7 +1186,7 @@ class _StatusSheetState extends State<_StatusSheet> {
                     ),
                   ),
                 ],
-                if (_method != '丢弃') ...[
+                if (_method == '转卖' || _method == '回收') ...[
                   const SizedBox(height: 12),
                   TextField(
                     controller: _price,
@@ -1202,6 +1195,17 @@ class _StatusSheetState extends State<_StatusSheet> {
                     ),
                     decoration: InputDecoration(
                       labelText: '实际回血金额',
+                      prefixText: '${widget.item.currencySymbol} ',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _cost,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: '运费、手续费等成本',
                       prefixText: '${widget.item.currencySymbol} ',
                     ),
                   ),
@@ -1244,12 +1248,13 @@ class _StatusSheetState extends State<_StatusSheet> {
   Future<void> _chooseProcessDate() async {
     final today = DateTime.now();
     final purchaseDate = widget.item.purchaseDateTime;
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showAppDatePicker(
+      context,
       initialDate: parseDate(_processDate) ?? today,
       firstDate: purchaseDate.isAfter(today) ? today : purchaseDate,
       lastDate: today,
-      helpText: '选择处理日期',
+      title: '选择处理日期',
+      confirmLabel: '确定处理日期',
     );
     if (picked != null) setState(() => _processDate = formatDate(picked));
   }
@@ -1268,7 +1273,8 @@ class _StatusSheetState extends State<_StatusSheet> {
         showAppSnack(context, _method == '转卖' ? '请输入转卖人' : '请输入接收人');
         return;
       }
-      if (_method != '丢弃' && (double.tryParse(_price.text) ?? 0) <= 0) {
+      if ((_method == '转卖' || _method == '回收') &&
+          (double.tryParse(_price.text.replaceAll(',', '')) ?? 0) <= 0) {
         showAppSnack(context, '请输入实际回血金额');
         return;
       }
@@ -1295,7 +1301,12 @@ class _StatusSheetState extends State<_StatusSheet> {
             _status == 'processed' && (_method == '转卖' || _method == '转赠')
             ? _detail.text.trim()
             : '',
-        price: _status == 'processed' ? double.tryParse(_price.text) ?? 0 : 0,
+        price: _status == 'processed' && (_method == '转卖' || _method == '回收')
+            ? double.tryParse(_price.text.replaceAll(',', '')) ?? 0
+            : 0,
+        cost: _status == 'processed' && (_method == '转卖' || _method == '回收')
+            ? double.tryParse(_cost.text.replaceAll(',', '')) ?? 0
+            : 0,
         processDate: _status == 'processed' ? _processDate : '',
       ),
     );
@@ -1315,6 +1326,7 @@ class _StatusSelection {
     required this.disposalPlatform,
     required this.disposalContact,
     required this.price,
+    required this.cost,
     required this.processDate,
   });
 
@@ -1329,5 +1341,6 @@ class _StatusSelection {
   final String disposalPlatform;
   final String disposalContact;
   final double price;
+  final double cost;
   final String processDate;
 }

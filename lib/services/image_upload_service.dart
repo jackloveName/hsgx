@@ -36,7 +36,14 @@ class ImageUploadService {
     final remoteName = signed!['fileName']?.toString() ?? fileName;
     final directory = signed['dir']?.toString() ?? '';
     final extension = fileName.split('.').last.toLowerCase();
-    final contentType = extension == 'png' ? 'image/png' : 'image/jpeg';
+    final contentType = switch (extension) {
+      'png' => 'image/png',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      'heic' => 'image/heic',
+      'heif' => 'image/heif',
+      _ => throw StateError('不支持上传 .$extension 格式的图片'),
+    };
     await _api.putExternal(presignUrl, bytes: bytes, contentType: contentType);
 
     final remotePath = '/${directory.trim()}/$remoteName'.replaceAll(
@@ -49,7 +56,7 @@ class ImageUploadService {
       body: [
         {
           'type': 1,
-          'fileType': extension == 'png' ? 'png' : 'jpg',
+          'fileType': extension == 'jpeg' ? 'jpg' : extension,
           'fileName': remoteName,
           'filePath': remotePath,
           'fileSize': bytes.length,
@@ -57,6 +64,41 @@ class ImageUploadService {
       ],
     );
     return '${AppConfig.resourceBaseUrl}$remotePath';
+  }
+
+  Future<void> deleteRemoteImages(
+    Iterable<String> resources, {
+    required String token,
+  }) async {
+    final filePaths = resources
+        .map(_remoteFilePath)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (filePaths.isEmpty) return;
+    await _api.post(
+      '/mall_biz/attach_file/delete',
+      token: token,
+      body: {'filePaths': filePaths},
+    );
+  }
+
+  String? _remoteFilePath(String resource) {
+    final clean = resource.trim();
+    if (clean.isEmpty) return null;
+    final uri = Uri.tryParse(clean);
+    if (uri != null && uri.hasScheme) {
+      if (uri.host != Uri.parse(AppConfig.resourceBaseUrl).host) return null;
+      return uri.path.startsWith('/') ? uri.path : '/${uri.path}';
+    }
+    if (RegExp(
+      r'^(/Users/|/var/|/private/|/tmp/|_doc/|_downloads/)',
+      caseSensitive: false,
+    ).hasMatch(clean)) {
+      return null;
+    }
+    if (clean.startsWith('/') && !clean.startsWith('//')) return clean;
+    return null;
   }
 
   Map<String, Object?>? _firstSignedFile(Object? value) {

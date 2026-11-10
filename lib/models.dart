@@ -12,6 +12,8 @@ const appBorder = Color(0xFFE9E3DA);
 const appPink = Color(0xFFE7849A);
 const appAmber = Color(0xFFE4B15C);
 const appBlue = Color(0xFF6C9FE8);
+const aggregateCurrencyCode = 'CNY';
+const activeItemStatuses = {'inuse', 'idle', 'repairing'};
 
 class AppSkin {
   const AppSkin({
@@ -515,7 +517,14 @@ class InventoryItem {
     this.disposalPlatform = '',
     this.disposalContact = '',
     this.disposalPrice = 0,
+    this.disposalCost = 0,
     this.processDate = '',
+    this.recoveryMethod = '',
+    this.recoveryTargetPrice = 0,
+    this.recoveryDeadline = '',
+    this.recoveryPlatform = '',
+    this.recoveryContact = '',
+    this.recoveryNote = '',
   }) : imagePaths = _asStringList(
          imagePaths == null || imagePaths.isEmpty
              ? (imagePath.trim().isEmpty ? const [] : [imagePath])
@@ -559,12 +568,28 @@ class InventoryItem {
   final String disposalPlatform;
   final String disposalContact;
   final double disposalPrice;
+  final double disposalCost;
   final String processDate;
+  final String recoveryMethod;
+  final double recoveryTargetPrice;
+  final String recoveryDeadline;
+  final String recoveryPlatform;
+  final String recoveryContact;
+  final String recoveryNote;
 
   ItemCategory get categoryInfo => categoryById(category);
   ItemStatus get statusInfo => statusById(status);
   CurrencyOption get currency => currencyByCode(purchaseCurrency);
   String get currencySymbol => currency.symbol;
+  bool get isActive => activeItemStatuses.contains(status);
+  bool get canAggregateInBaseCurrency =>
+      purchaseCurrency.toUpperCase() == aggregateCurrencyCode;
+  bool get isCashRecovery => disposalMethod == '转卖' || disposalMethod == '回收';
+  double get cashRecoveredAmount =>
+      isCashRecovery ? math.max(0, disposalPrice - disposalCost) : 0;
+  bool get hasRecoveryPlan => recoveryMethod.isNotEmpty;
+  double get recoveryEstimateLow => math.max(0, currentTotal * 0.6);
+  double get recoveryEstimateHigh => math.max(0, currentTotal * 0.8);
   String get imagePath => imagePaths.isEmpty ? '' : imagePaths.first;
   double get purchaseTotal => purchasePrice * quantity;
   double get currentTotal => currentValue * quantity;
@@ -730,12 +755,19 @@ class InventoryItem {
     });
   }
 
-  DateTime? get lastUsedAt {
-    final dates =
-        usageRecords.map(DateTime.tryParse).whereType<DateTime>().toList()
-          ..sort();
-    return dates.isEmpty ? null : dates.last;
+  DateTime? lastUsedAtAsOf(DateTime now) {
+    if (usageMode == 'manual') {
+      final dates =
+          usageRecords.map(DateTime.tryParse).whereType<DateTime>().toList()
+            ..sort();
+      return dates.isEmpty ? null : dates.last;
+    }
+    if (status == 'inuse') return _startOfDay(now);
+    final intervals = usageIntervalsAsOf(now);
+    return intervals.isEmpty ? null : intervals.last.end;
   }
+
+  DateTime? get lastUsedAt => lastUsedAtAsOf(DateTime.now());
 
   int get effectiveTargetDays {
     if (targetUseDays > 0) return targetUseDays;
@@ -748,10 +780,10 @@ class InventoryItem {
     };
   }
 
-  double get ownedDailyCost => ownedDays == 0 ? 0 : purchasePrice / ownedDays;
-  double get usageDailyCost => usageDays == 0 ? 0 : purchasePrice / usageDays;
+  double get ownedDailyCost => ownedDays == 0 ? 0 : purchaseTotal / ownedDays;
+  double get usageDailyCost => usageDays == 0 ? 0 : purchaseTotal / usageDays;
   double get targetDailyCost =>
-      effectiveTargetDays == 0 ? 0 : purchasePrice / effectiveTargetDays;
+      effectiveTargetDays == 0 ? 0 : purchaseTotal / effectiveTargetDays;
 
   DateTime? get warrantyEnd {
     final explicit = parseDate(warrantyEndDate);
@@ -804,7 +836,14 @@ class InventoryItem {
     String? disposalPlatform,
     String? disposalContact,
     double? disposalPrice,
+    double? disposalCost,
     String? processDate,
+    String? recoveryMethod,
+    double? recoveryTargetPrice,
+    String? recoveryDeadline,
+    String? recoveryPlatform,
+    String? recoveryContact,
+    String? recoveryNote,
   }) {
     return InventoryItem(
       id: id ?? this.id,
@@ -845,7 +884,14 @@ class InventoryItem {
       disposalPlatform: disposalPlatform ?? this.disposalPlatform,
       disposalContact: disposalContact ?? this.disposalContact,
       disposalPrice: disposalPrice ?? this.disposalPrice,
+      disposalCost: disposalCost ?? this.disposalCost,
       processDate: processDate ?? this.processDate,
+      recoveryMethod: recoveryMethod ?? this.recoveryMethod,
+      recoveryTargetPrice: recoveryTargetPrice ?? this.recoveryTargetPrice,
+      recoveryDeadline: recoveryDeadline ?? this.recoveryDeadline,
+      recoveryPlatform: recoveryPlatform ?? this.recoveryPlatform,
+      recoveryContact: recoveryContact ?? this.recoveryContact,
+      recoveryNote: recoveryNote ?? this.recoveryNote,
     );
   }
 
@@ -896,6 +942,7 @@ class InventoryItem {
     'disposalPlatform': disposalPlatform,
     'disposalContact': disposalContact,
     'disposalPrice': disposalPrice,
+    'disposalCost': disposalCost,
     'disposalInfo': {
       'method': disposalMethod,
       'salePlatform': disposalMethod == '转卖' ? disposalPlatform : '',
@@ -903,9 +950,16 @@ class InventoryItem {
       'sellerName': disposalMethod == '转卖' ? disposalContact : '',
       'recipient': disposalMethod == '转赠' ? disposalContact : '',
       'finalPrice': disposalPrice,
+      'cost': disposalCost,
       'actualProcessDate': processDate,
     },
     'processDate': processDate,
+    'recoveryMethod': recoveryMethod,
+    'recoveryTargetPrice': recoveryTargetPrice,
+    'recoveryDeadline': recoveryDeadline,
+    'recoveryPlatform': recoveryPlatform,
+    'recoveryContact': recoveryContact,
+    'recoveryNote': recoveryNote,
   };
 
   factory InventoryItem.fromJson(Map<String, Object?> json) {
@@ -1012,12 +1066,19 @@ class InventoryItem {
       disposalPlatform: disposalPlatform,
       disposalContact: disposalContact,
       disposalPrice: disposalPrice,
+      disposalCost: _asDouble(json['disposalCost'] ?? disposalInfo['cost']),
       processDate:
           (json['processDate'] ??
                   json['actualProcessDate'] ??
                   disposalInfo['actualProcessDate'] ??
                   '')
               .toString(),
+      recoveryMethod: json['recoveryMethod']?.toString() ?? '',
+      recoveryTargetPrice: _asDouble(json['recoveryTargetPrice']),
+      recoveryDeadline: json['recoveryDeadline']?.toString() ?? '',
+      recoveryPlatform: json['recoveryPlatform']?.toString() ?? '',
+      recoveryContact: json['recoveryContact']?.toString() ?? '',
+      recoveryNote: json['recoveryNote']?.toString() ?? '',
     );
   }
 }
@@ -1035,6 +1096,7 @@ class WishEntry {
     this.coolingDays = 7,
     required this.createdAt,
     this.status = 'cooling',
+    this.desireType = '',
   });
 
   final String id;
@@ -1045,6 +1107,7 @@ class WishEntry {
   final int coolingDays;
   final String createdAt;
   final String status;
+  final String desireType;
 
   DateTime get createdAtDate => DateTime.tryParse(createdAt) ?? DateTime.now();
   DateTime get decisionDue => createdAtDate.add(Duration(days: coolingDays));
@@ -1056,15 +1119,26 @@ class WishEntry {
   );
   ItemCategory get categoryInfo => categoryById(category);
 
-  WishEntry copyWith({String? id, String? status}) => WishEntry(
+  WishEntry copyWith({
+    String? id,
+    String? name,
+    String? category,
+    double? expectedPrice,
+    String? reason,
+    int? coolingDays,
+    String? createdAt,
+    String? status,
+    String? desireType,
+  }) => WishEntry(
     id: id ?? this.id,
-    name: name,
-    category: category,
-    expectedPrice: expectedPrice,
-    reason: reason,
-    coolingDays: coolingDays,
-    createdAt: createdAt,
+    name: name ?? this.name,
+    category: category ?? this.category,
+    expectedPrice: expectedPrice ?? this.expectedPrice,
+    reason: reason ?? this.reason,
+    coolingDays: coolingDays ?? this.coolingDays,
+    createdAt: createdAt ?? this.createdAt,
     status: status ?? this.status,
+    desireType: desireType ?? this.desireType,
   );
 
   Map<String, Object?> toJson() => {
@@ -1076,6 +1150,7 @@ class WishEntry {
     'coolingDays': coolingDays,
     'createdAt': createdAt,
     'status': status,
+    'desireType': desireType,
   };
 
   factory WishEntry.fromJson(Map<String, Object?> json) {
@@ -1091,6 +1166,7 @@ class WishEntry {
       createdAt:
           json['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
       status: json['status']?.toString() ?? 'cooling',
+      desireType: json['desireType']?.toString() ?? '',
     );
   }
 }

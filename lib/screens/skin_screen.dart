@@ -13,6 +13,7 @@ class SkinScreen extends StatelessWidget {
       animation: AppStore.instance,
       builder: (context, _) {
         final data = appSkins;
+        final primary = Theme.of(context).colorScheme.primary;
         return PageFrame(
           title: '皮肤选择',
           child: Column(
@@ -24,7 +25,7 @@ class SkinScreen extends StatelessWidget {
                   successMessage: '已切换为跟随系统',
                 ),
                 borderColor: AppStore.instance.skinIndex == -1
-                    ? appPrimary.withValues(alpha: 0.5)
+                    ? primary.withValues(alpha: 0.5)
                     : appBorder,
                 child: Row(
                   children: [
@@ -63,7 +64,7 @@ class SkinScreen extends StatelessWidget {
                       ),
                     ),
                     if (AppStore.instance.skinIndex == -1)
-                      const Icon(Icons.check_circle_rounded, color: appPrimary),
+                      Icon(Icons.check_circle_rounded, color: primary),
                   ],
                 ),
               ),
@@ -121,9 +122,9 @@ class SkinScreen extends StatelessWidget {
                         ),
                       ),
                       if (AppStore.instance.skinIndex == index)
-                        const Icon(
+                        Icon(
                           Icons.check_circle_rounded,
-                          color: appPrimary,
+                          color: data[index].primary,
                         ),
                     ],
                   ),

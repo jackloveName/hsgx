@@ -5,6 +5,7 @@ import 'package:hsgx/models.dart';
 import 'package:hsgx/services/api/api_client.dart';
 import 'package:hsgx/services/cloud_sync_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 class FakeHttpClient extends http.BaseClient {
   final List<http.BaseRequest> requests = [];
@@ -89,6 +90,70 @@ void main() {
         ),
       ),
       throwsA(isA<ApiException>()),
+    );
+  });
+
+  test('注销前会把账号的三份业务配置清空', () async {
+    final client = FakeHttpClient();
+    final service = CloudSyncService(client: client);
+
+    await service.clearAccountData(phone: '13800138000', token: 'token');
+
+    final bodies = client.requests
+        .whereType<http.Request>()
+        .where((request) => request.method == 'POST')
+        .map((request) => jsonDecode(request.body) as Map)
+        .toList();
+    expect(bodies, hasLength(3));
+    for (final body in bodies) {
+      expect(jsonDecode(body['paramValue'].toString()), isEmpty);
+    }
+  });
+
+  test('云端配置损坏时拒绝解析而不是返回空数据', () async {
+    final service = CloudSyncService(
+      client: MockClient((request) async {
+        final key = request.url.pathSegments.last;
+        final data = key == '13800138000ItemData'
+            ? 'not-json'
+            : key == '13800138000WishListData'
+            ? '[]'
+            : '[]';
+        return http.Response(
+          jsonEncode({'code': '00000', 'data': data}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    await expectLater(
+      service.loadAccountData(phone: '13800138000', token: 'token'),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('云端列表包含损坏条目时拒绝静默丢弃', () async {
+    final service = CloudSyncService(
+      client: MockClient((request) async {
+        final key = request.url.pathSegments.last;
+        final data = key == '13800138000ItemData'
+            ? [
+                {'id': 'valid', 'name': '有效物品'},
+                'broken',
+              ]
+            : <Object?>[];
+        return http.Response(
+          jsonEncode({'code': '00000', 'data': data}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    await expectLater(
+      service.loadAccountData(phone: '13800138000', token: 'token'),
+      throwsA(isA<FormatException>()),
     );
   });
 }

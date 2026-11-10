@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#43BCA5"/>
+      <stop offset="0.55" stop-color="#4F91C9"/>
+      <stop offset="1" stop-color="#526DD0"/>
+    </linearGradient>
+    <linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E7F5EF"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#1D3A59" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <circle cx="240" cy="208" r="188" fill="#FFFFFF" opacity="0.07"/>
+  <circle cx="826" cy="824" r="250" fill="#8DDBD1" opacity="0.12"/>
+  <circle cx="512" cy="480" r="372" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.16"/>
+  <g filter="url(#shadow)">
+    <g transform="translate(512 424)">
+      <ellipse rx="86" ry="132" transform="rotate(-62)" cy="-80" fill="#FFF7E8"/>
+      <ellipse rx="86" ry="132" transform="rotate(62)" cy="-80" fill="#FFE1E5"/>
+      <ellipse rx="86" ry="132" transform="rotate(-16)" cy="-96" fill="#FFF0D2"/>
+      <ellipse rx="86" ry="132" transform="rotate(16)" cy="-96" fill="#FFF7E8"/>
+      <ellipse rx="80" ry="126" cy="-112" fill="#EAA0A8"/>
+      <circle r="54" fill="#E9B343"/>
+      <circle r="25" fill="#FFF4CE"/>
+    </g>
+    <path d="M276 666 L512 584 L748 666 L704 812 C694 838 672 852 644 852 L380 852 C352 852 330 838 320 812Z" fill="url(#box)"/>
+    <path d="M512 584 L748 666 L512 748 L276 666Z" fill="#FFFBEF"/>
+    <path d="M512 584 L748 666 L696 698 L512 630 L328 698 L276 666Z" fill="#F4CE84"/>
+    <rect x="474" y="722" width="76" height="132" rx="26" fill="#DD7188"/>
+    <circle cx="512" cy="760" r="32" fill="#FFFFFF"/>
+    <circle cx="512" cy="760" r="14" fill="#2F6D73"/>
+  </g>
+  <path d="M228 626 C164 580 132 504 142 428" fill="none" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round" opacity="0.28"/>
+  <path d="M820 494 C864 548 882 618 862 680" fill="none" stroke="#FFE2D3" stroke-width="13" stroke-linecap="round" opacity="0.5"/>
+  <circle cx="786" cy="270" r="14" fill="#FFF0B9"/>
+</svg>

@@ -6,6 +6,8 @@ build/
 *.iml
 .DS_Store
 *.log
+coverage/
+design/_media-artifacts/
 
 # 本地笔记，不进仓库
 a.md

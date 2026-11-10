@@ -8,7 +8,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models.dart';
 import '../widgets.dart';
 import 'api/api_client.dart';
 import 'api/api_settings.dart';
@@ -66,11 +65,13 @@ class AppUpdateService {
         }
       }
       if (!context.mounted) return;
+      final invalidForceConfig = update.force && update.downloadUrl.isEmpty;
+      final canDismiss = !update.force || invalidForceConfig;
       await showDialog<void>(
         context: context,
-        barrierDismissible: !update.force,
+        barrierDismissible: canDismiss,
         builder: (dialogContext) => PopScope(
-          canPop: !update!.force,
+          canPop: canDismiss,
           child: AlertDialog(
             title: const Text('发现新版本'),
             shape: RoundedRectangleBorder(
@@ -100,9 +101,13 @@ class AppUpdateService {
               ),
             ),
             actions: [
-              if (!info.force)
+              if (canDismiss)
                 TextButton(
                   onPressed: () async {
+                    if (invalidForceConfig) {
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      return;
+                    }
                     final prefs = await SharedPreferences.getInstance();
                     await prefs.setString(
                       _skipKey,
@@ -110,7 +115,7 @@ class AppUpdateService {
                     );
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   },
-                  child: const Text('稍后'),
+                  child: Text(invalidForceConfig ? '关闭' : '稍后'),
                 ),
               FilledButton(
                 onPressed: info.downloadUrl.isEmpty
@@ -292,10 +297,11 @@ class _UpdateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F8F6),
+        color: Color.lerp(primary, Colors.white, 0.92),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -304,7 +310,7 @@ class _UpdateBadge extends StatelessWidget {
             force
                 ? Icons.system_update_alt_rounded
                 : Icons.new_releases_outlined,
-            color: appPrimary,
+            color: primary,
             size: 24,
           ),
           const SizedBox(width: 12),

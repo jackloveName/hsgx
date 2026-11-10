@@ -3,6 +3,59 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 
+@immutable
+class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
+  const AppThemeTokens({
+    required this.softPrimary,
+    required this.heroStart,
+    required this.heroEnd,
+  });
+
+  final Color softPrimary;
+  final Color heroStart;
+  final Color heroEnd;
+
+  static AppThemeTokens of(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<AppThemeTokens>() ??
+        AppThemeTokens(
+          softPrimary: Color.lerp(
+            theme.colorScheme.primary,
+            Colors.white,
+            0.88,
+          )!,
+          heroStart: theme.colorScheme.primary,
+          heroEnd: theme.colorScheme.secondary,
+        );
+  }
+
+  @override
+  AppThemeTokens copyWith({
+    Color? softPrimary,
+    Color? heroStart,
+    Color? heroEnd,
+  }) {
+    return AppThemeTokens(
+      softPrimary: softPrimary ?? this.softPrimary,
+      heroStart: heroStart ?? this.heroStart,
+      heroEnd: heroEnd ?? this.heroEnd,
+    );
+  }
+
+  @override
+  AppThemeTokens lerp(
+    covariant ThemeExtension<AppThemeTokens>? other,
+    double t,
+  ) {
+    if (other is! AppThemeTokens) return this;
+    return AppThemeTokens(
+      softPrimary: Color.lerp(softPrimary, other.softPrimary, t)!,
+      heroStart: Color.lerp(heroStart, other.heroStart, t)!,
+      heroEnd: Color.lerp(heroEnd, other.heroEnd, t)!,
+    );
+  }
+}
+
 ThemeData buildAppTheme([int skinIndex = 0]) {
   final skin = appSkinAt(skinIndex);
   final primary = skin.primary;
@@ -19,6 +72,13 @@ ThemeData buildAppTheme([int skinIndex = 0]) {
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
+    extensions: [
+      AppThemeTokens(
+        softPrimary: softPrimary,
+        heroStart: skin.heroStart,
+        heroEnd: skin.heroEnd,
+      ),
+    ],
     scaffoldBackgroundColor: skin.background,
     fontFamily: 'PingFang SC',
     textTheme: const TextTheme(

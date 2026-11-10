@@ -5,21 +5,29 @@ import 'package:flutter/services.dart';
 
 import '../app_store.dart';
 import '../models.dart';
+import '../services/agreement_page_launcher.dart';
+import '../services/agreement_service.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../widgets.dart';
 import 'privacy_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.onComplete});
+
+  final VoidCallback? onComplete;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _authService = AuthService();
-  final _cloudService = CloudSyncService();
+  final _authService = AuthService(
+    onUnauthorized: AppStore.instance.handleUnauthorized,
+  );
+  final _cloudService = CloudSyncService(
+    onUnauthorized: AppStore.instance.handleUnauthorized,
+  );
   final _phone = TextEditingController();
   final _password = TextEditingController();
   final _code = TextEditingController();
@@ -67,7 +75,8 @@ class _LoginScreenState extends State<LoginScreen> {
             left: -130,
             child: _GlowCircle(
               size: 280,
-              color: appPink.withValues(alpha: 0.09),
+              color: Theme.of(context).colorScheme.secondary
+                  .withValues(alpha: 0.09),
             ),
           ),
           SafeArea(
@@ -91,9 +100,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _SyncSummary(
-                                itemCount: store.items.length,
-                                wishCount: store.wishlist.length,
+                              _LocalDataSummary(
+                                itemCount: store.guestCloudData.items.length,
+                                wishCount: store.guestCloudData.wishlist.length,
                               ),
                               const SizedBox(height: 18),
                               _ModeSwitcher(
@@ -217,20 +226,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 loading: _submitting,
                                 onPressed: _submit,
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                '同步成功后清除本机游客副本；失败时数据完整保留',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: appMuted, fontSize: 10),
-                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 18),
                         TextButton(
-                          onPressed: _submitting
-                              ? null
-                              : () => Navigator.pop(context, false),
+                          onPressed: _submitting ? null : _continueAsGuest,
                           child: const Text('暂不登录，继续使用游客模式'),
                         ),
                       ],
@@ -246,10 +247,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _sendCode() async {
-    if (!_agreementAccepted) {
-      setState(() => _error = '请先阅读并同意隐私政策和平台注册协议');
-      return;
-    }
     if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(_phone.text)) {
       setState(() => _error = '请输入正确的手机号');
       return;
@@ -274,9 +271,12 @@ class _LoginScreenState extends State<LoginScreen> {
       showAppSnack(context, '验证码已发送');
     } catch (error) {
       if (mounted) {
-        setState(
-          () => _error = error.toString().replaceFirst('Bad state: ', ''),
-        );
+        final message = error.toString().replaceFirst('Bad state: ', '');
+        setState(() {
+          _error = message.contains('发送短信失败')
+              ? '短信服务暂时不可用，请稍后重试或改用密码登录'
+              : message;
+        });
       }
     } finally {
       if (mounted) setState(() => _sendingCode = false);
@@ -323,26 +323,43 @@ class _LoginScreenState extends State<LoginScreen> {
         gender: profile.gender,
       );
       if (!mounted) return;
-      Navigator.pop(context, true);
+      _finishLogin();
     } catch (error) {
       if (mounted) {
-        setState(() {
-          _error =
-              '登录或同步失败，游客数据仍保留在本机。'
-              '${error.toString().replaceFirst('Bad state: ', '')}';
-        });
+        final detail = error.toString().replaceFirst('Bad state: ', '');
+        setState(() => _error = detail);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _openAgreement(int initialIndex) {
+  Future<void> _openAgreement(int initialIndex) async {
+    final key = initialIndex == 0
+        ? AgreementService.privacyKey
+        : AgreementService.registerKey;
+    if (await AgreementPageLauncher.open(key) || !mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PrivacyScreen(initialIndex: initialIndex),
       ),
     );
+  }
+
+  void _finishLogin() {
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.pop(context, true);
+    }
+  }
+
+  void _continueAsGuest() {
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.pop(context, false);
+    }
   }
 }
 
@@ -394,13 +411,18 @@ class _LoginHeader extends StatelessWidget {
           '物有所归，心有所安',
           style: TextStyle(color: appMuted, fontSize: 12, letterSpacing: 1.5),
         ),
+        const SizedBox(height: 6),
+        const Text(
+          '拾一件 · 归一处 · 藏一匣',
+          style: TextStyle(color: appMuted, fontSize: 9, letterSpacing: 1.1),
+        ),
       ],
     );
   }
 }
 
-class _SyncSummary extends StatelessWidget {
-  const _SyncSummary({required this.itemCount, required this.wishCount});
+class _LocalDataSummary extends StatelessWidget {
+  const _LocalDataSummary({required this.itemCount, required this.wishCount});
 
   final int itemCount;
   final int wishCount;
@@ -423,7 +445,7 @@ class _SyncSummary extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(13),
             ),
-            child: Icon(Icons.cloud_upload_outlined, color: primary, size: 21),
+            child: Icon(Icons.person_outline_rounded, color: primary, size: 21),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -431,12 +453,12 @@ class _SyncSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '登录后同步游客记录',
+                  '登录后继续使用完整功能',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$itemCount 件物品 · $wishCount 个心愿等待同步',
+                  '$itemCount 件物品 · $wishCount 个心愿',
                   style: const TextStyle(color: appMuted, fontSize: 10),
                 ),
               ],
@@ -669,55 +691,95 @@ class _LoginButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: loading ? null : onPressed,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          height: 54,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [primary, Color.lerp(primary, appBlue, 0.28)!],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: primary.withValues(alpha: 0.24),
-                blurRadius: 20,
-                offset: const Offset(0, 9),
-              ),
-            ],
-          ),
-          child: Center(
-            child: loading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.cloud_sync_outlined,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      SizedBox(width: 9),
-                      Text(
-                        '登录并同步',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+    return AnimatedScale(
+      scale: loading ? 0.985 : 1,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      child: Semantics(
+        button: true,
+        enabled: !loading,
+        label: loading ? '登录中' : '登录',
+        child: IgnorePointer(
+          ignoring: loading,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: loading ? null : onPressed,
+              borderRadius: BorderRadius.circular(18),
+              child: Ink(
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      primary,
+                      Color.lerp(
+                        primary,
+                        Theme.of(context).colorScheme.secondary,
+                        0.35,
+                      )!,
                     ],
                   ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primary.withValues(alpha: loading ? 0.12 : 0.24),
+                      blurRadius: loading ? 10 : 20,
+                      offset: Offset(0, loading ? 4 : 9),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(
+                          begin: 0.92,
+                          end: 1,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: loading
+                        ? const Row(
+                            key: ValueKey('login-loading'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 19,
+                                height: 19,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 9),
+                              Text(
+                                '登录中…',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Text(
+                            '登录',
+                            key: ValueKey('login-idle'),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

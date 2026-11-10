@@ -83,4 +83,23 @@ void main() {
     expect(result.type, 'ignored');
     expect(result.message, contains('没有使用'));
   });
+
+  test('高频手动物品使用次数时不再显示重叠的“天或次”', () {
+    final result = buildHomeInsight(
+      [
+        _item(
+          id: 'favorite',
+          usageMode: 'manual',
+          manualUsageCount: 8,
+          usageRecords: const ['2026-11-02T00:00:00.000'],
+        ),
+      ],
+      const [],
+      now: now,
+    );
+
+    expect(result.type, 'positive');
+    expect(result.message, contains('已记录使用 8 次'));
+    expect(result.message, isNot(contains('天或次')));
+  });
 }

@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../app_store.dart';
-import '../components/home_asset_summary.dart';
-import '../components/home_insight_card.dart';
+import '../components/home_daily_hero.dart';
+import '../components/home_today_actions.dart';
 import '../components/icon_shortcut.dart';
-import '../components/item_list_card.dart';
+import '../components/local_data_status_banner.dart';
+import '../components/recent_item_shelf.dart';
 import '../domain/home_insight.dart';
+import '../domain/items_browse.dart';
 import '../models.dart';
 import '../services/app_update_service.dart';
 import '../services/cloud_sync_service.dart';
+import '../theme.dart';
 import '../widgets.dart';
 import 'item_detail_screen.dart';
 import 'login_screen.dart';
@@ -38,9 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final store = AppStore.instance;
     final items = store.items;
     final insight = buildHomeInsight(items, store.wishlist);
-    final idleValue = items
-        .where((item) => item.status == 'idle')
-        .fold<double>(0, (sum, item) => sum + item.currentTotal);
+    final dailyItem = _dailyItem(store, insight);
+    final recentPreview = recentItemsForHome(items);
+    final todayActions = _todayActions(context, store, insight);
     return AppBackdrop(
       child: SafeArea(
         bottom: false,
@@ -49,67 +52,47 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: () => _refresh(context),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 116),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 116),
               children: [
-                HomeAssetSummary(
-                  totalValue: store.totalCurrentValue,
-                  ownedDailyCost: store.totalOwnedDaily,
-                  idleValue: idleValue,
-                  totalCount: items.length,
-                  inUseCount: store.countByStatus('inuse'),
-                  idleCount: store.countByStatus('idle'),
+                const LocalDataStatusBanner(
+                  margin: EdgeInsets.only(bottom: 12),
+                ),
+                _HomeHeader(
                   isGuest: store.isGuest,
-                  onStatusTap: (filter) =>
-                      MainShell.of(context).openItemsFilter(filter),
-                  onAccountTap: () {
-                    if (store.isGuest) {
-                      _openLogin(context);
-                    } else {
-                      MainShell.of(context).selectTab(3);
-                    }
-                  },
+                  guestAddsRemaining: store.guestAddsRemaining,
+                  onLogin: () => _openLogin(context),
                 ),
-                const SizedBox(height: 16),
-                HomeInsightCard(
-                  type: insight.type,
-                  title: insight.title,
-                  message: insight.message,
-                  onTap: () => _handleInsight(context, insight),
+                const SizedBox(height: 18),
+                HomeDailyHero(
+                  item: dailyItem,
+                  title: dailyItem?.name ?? '从第一件美好开始',
+                  message: _dailyMessage(dailyItem, insight),
+                  actionLabel: _dailyActionLabel(dailyItem, insight),
+                  onAction: dailyItem == null
+                      ? () => MainShell.of(context).openAddItem()
+                      : () => _handleDailyAction(context, dailyItem, insight),
                 ),
-                const SectionHeading(title: '生活入口'),
+                if (todayActions.isNotEmpty) ...[
+                  const SectionHeading(title: '今天可以这样与匣相处'),
+                  HomeTodayActions(actions: todayActions),
+                ],
+                const SectionHeading(title: '匣中去处'),
                 _QuickActions(
                   onStorage: () => _push(context, const StorageScreen()),
                   onWishlist: () => _push(context, const WishlistScreen()),
                   onRecovery: () => _push(context, const RecoveryScreen()),
                 ),
-                SectionHeading(
-                  title: '最近放入',
-                  trailing: TextButton(
-                    onPressed: () =>
-                        MainShell.of(context).openItemsFilter('all'),
-                    child: const Text('查看全部'),
+                if (items.isNotEmpty) ...[
+                  const SectionHeading(title: '匣中常在'),
+                  RecentItemShelf(
+                    items: recentPreview,
+                    onTap: (item) => _openDetail(context, item),
+                    onLongPress: (item) => _showRecentActions(context, item),
                   ),
-                ),
-                if (items.isEmpty)
-                  EmptyState(
-                    title: '收纳匣还是空的',
-                    description: '从第一件值得被记住的物品开始。',
-                    action: PrimaryButton(
-                      label: '添加第一件物品',
-                      icon: Icons.add_rounded,
-                      expanded: false,
-                      onPressed: () => MainShell.of(context).openAddItem(),
-                    ),
-                  )
-                else
-                  for (final item in items.take(3)) ...[
-                    ItemListCard(
-                      item: item,
-                      onTap: () => _openDetail(context, item),
-                      onLongPress: () => _showRecentActions(context, item),
-                    ),
-                    const SizedBox(height: 11),
-                  ],
+                ] else ...[
+                  const SectionHeading(title: '记录之后，你会看到'),
+                  const _FirstRecordGuide(),
+                ],
               ],
             ),
           ),
@@ -124,23 +107,220 @@ class _HomeScreenState extends State<HomeScreen> {
       await store.expireGuestDataIfNeeded();
       return;
     }
+    if (store.cloudSyncPending || store.isSaving) return;
+    CloudSyncService? service;
     try {
-      final service = CloudSyncService();
+      final revision = store.dataRevision;
+      service = CloudSyncService(
+        onUnauthorized: AppStore.instance.handleUnauthorized,
+      );
       final result = await service.loadAccountData(
         phone: store.accountPhone,
         token: store.sessionToken,
       );
-      service.close();
-      await store.applyCloudRefresh(result);
-      if (context.mounted) showAppSnack(context, '云端数据已更新');
+      if (store.cloudSyncPending ||
+          store.isSaving ||
+          store.dataRevision != revision) {
+        return;
+      }
+      await store.applyCloudRefresh(result, expectedRevision: revision);
     } catch (error) {
       if (context.mounted) {
         showAppSnack(
           context,
-          '同步失败，已保留本机数据：${error.toString().replaceFirst('Bad state: ', '')}',
+          '刷新失败，已保留本机数据：${error.toString().replaceFirst('Bad state: ', '')}',
         );
       }
+    } finally {
+      service?.close();
     }
+  }
+
+  InventoryItem? _dailyItem(AppStore store, HomeInsight insight) {
+    if (insight.itemId != null) {
+      final matched = store.itemById(insight.itemId!);
+      if (matched != null) return matched;
+    }
+    final items = store.items
+        .where(
+          (item) => const ['inuse', 'idle', 'repairing'].contains(item.status),
+        )
+        .toList();
+    if (items.isEmpty) return null;
+    items.sort((first, second) {
+      if (first.favorite != second.favorite) return first.favorite ? -1 : 1;
+      final firstUsed = first.lastUsedAt;
+      final secondUsed = second.lastUsedAt;
+      if (firstUsed != null || secondUsed != null) {
+        if (firstUsed == null) return 1;
+        if (secondUsed == null) return -1;
+        final byUse = secondUsed.compareTo(firstUsed);
+        if (byUse != 0) return byUse;
+      }
+      return second.ownedDays.compareTo(first.ownedDays);
+    });
+    return items.first;
+  }
+
+  String _dailyMessage(InventoryItem? item, HomeInsight insight) {
+    if (item == null) {
+      return '选一件每天都会用到的东西，拍张照片。让使用时间、成本和陪伴，从今天开始有迹可循。';
+    }
+    if (insight.itemId == item.id) {
+      return _withoutItemPrefix(insight.message, item.name);
+    }
+    final location = item.storageLocation.trim().isEmpty
+        ? '你的收纳匣'
+        : item.storageLocation;
+    return switch (item.status) {
+      'idle' => '它在 $location 安静待了 ${item.idleDays} 天。今天可以重新用一次，也可以给它一个新去处。',
+      'repairing' =>
+        item.repairDays > 0
+            ? '它正在维修中，预计需要 ${item.repairDays} 天。记录这个过程，也算认真对待拥有。'
+            : '它正在维修中。记录这个过程，也算认真对待拥有。',
+      'processed' => '它已经结束陪伴，但那些被好好使用的日子值得留在记录里。',
+      'retired' => '它已经从生活里退场，留下来的故事仍然可以被好好收藏。',
+      _ when item.usageMode == 'manual' && item.usageDays > 0 =>
+        '已陪伴 ${item.ownedDays} 天，累计使用 ${item.usageDays} 次。今天也可以再记录一次。',
+      _ when item.usageDays > 0 =>
+        '已陪伴 ${item.ownedDays} 天，累计使用 ${item.usageDays} 天。今天也让它继续参与生活。',
+      _ => '已陪伴 ${item.ownedDays} 天。从一次使用记录开始，慢慢看见它真实的日常价值。',
+    };
+  }
+
+  String _withoutItemPrefix(String message, String itemName) {
+    if (!message.startsWith(itemName)) return message;
+    final trimmed = message.substring(itemName.length).trimLeft();
+    return trimmed.isEmpty ? message : trimmed;
+  }
+
+  String _dailyActionLabel(InventoryItem? item, HomeInsight insight) {
+    if (item == null) return '记录第一件物品';
+    if (insight.itemId != item.id) {
+      return item.usageMode == 'manual' ? '记录一次使用' : '看看它';
+    }
+    return switch (insight.type) {
+      'warranty' => '查看期限',
+      'stock' => '看看余量',
+      'idle' => '安排新去处',
+      'ignored' => '重新用起来',
+      'positive' => '看看使用记录',
+      _ => '看看它',
+    };
+  }
+
+  Future<void> _handleDailyAction(
+    BuildContext context,
+    InventoryItem item,
+    HomeInsight insight,
+  ) async {
+    if (insight.itemId == item.id && insight.action == 'recovery') {
+      _push(context, const RecoveryScreen());
+      return;
+    }
+    if (insight.itemId != item.id && item.usageMode == 'manual') {
+      await runStoreAction(
+        context,
+        () => AppStore.instance.incrementUsage(item.id, 1),
+        successMessage: '已记录一次使用',
+      );
+      return;
+    }
+    _openDetail(context, item);
+  }
+
+  List<HomeActionItem> _todayActions(
+    BuildContext context,
+    AppStore store,
+    HomeInsight insight,
+  ) {
+    if (store.items.isEmpty) return const [];
+    final actions = <HomeActionItem>[
+      HomeActionItem(
+        label: _insightLabel(insight.type),
+        title: insight.title,
+        message: insight.message,
+        icon: _insightIcon(insight.type),
+        color: _insightColor(context),
+        onTap: () => _handleInsight(context, insight),
+      ),
+    ];
+    final idleItems = store.items
+        .where((item) => item.status == 'idle')
+        .toList();
+    if (idleItems.isNotEmpty && insight.type != 'idle') {
+      actions.add(
+        HomeActionItem(
+          label: '闲置回看',
+          title: '${idleItems.length} 件物品正在等待决定',
+          message: '用一次或回血，都比继续放着更有答案。',
+          icon: Icons.recycling_rounded,
+          color: Theme.of(context).colorScheme.primary,
+          onTap: () => _push(context, const RecoveryScreen()),
+        ),
+      );
+    }
+    final coolingWishes = store.wishlist
+        .where((entry) => entry.status == 'cooling')
+        .toList();
+    if (coolingWishes.isNotEmpty &&
+        insight.type != 'wishlist' &&
+        actions.length < 3) {
+      coolingWishes.sort(
+        (first, second) => first.remainingDays.compareTo(second.remainingDays),
+      );
+      actions.add(
+        HomeActionItem(
+          label: '心愿冷静期',
+          title: '${coolingWishes.length} 个心愿还在等待答案',
+          message: '最近的一个还有 ${coolingWishes.first.remainingDays} 天结束冷静期。',
+          icon: Icons.favorite_border_rounded,
+          color: Theme.of(context).colorScheme.primary,
+          onTap: () => _push(context, const WishlistScreen()),
+        ),
+      );
+    }
+    if (actions.length < 2) {
+      actions.add(
+        HomeActionItem(
+          label: '生活整理',
+          title: '把常用物品放到顺手的位置',
+          message: '打开归处地图，看看家中物品都分布在哪里。',
+          icon: Icons.shelves,
+          color: Theme.of(context).colorScheme.primary,
+          onTap: () => _push(context, const StorageScreen()),
+        ),
+      );
+    }
+    return actions.take(3).toList();
+  }
+
+  IconData _insightIcon(String type) {
+    return switch (type) {
+      'warranty' => Icons.event_available_outlined,
+      'stock' => Icons.inventory_2_outlined,
+      'idle' => Icons.recycling_rounded,
+      'wishlist' => Icons.favorite_border_rounded,
+      'ignored' => Icons.visibility_off_outlined,
+      'positive' => Icons.auto_awesome_rounded,
+      _ => Icons.add_circle_outline_rounded,
+    };
+  }
+
+  String _insightLabel(String type) {
+    return switch (type) {
+      'warranty' => '期限提醒',
+      'stock' => '库存提醒',
+      'idle' => '闲置提醒',
+      'wishlist' => '心愿提醒',
+      'ignored' => '使用提醒',
+      'positive' => '今日记录',
+      _ => '今日洞察',
+    };
+  }
+
+  Color _insightColor(BuildContext context) {
+    return Theme.of(context).colorScheme.primary;
   }
 
   void _handleInsight(BuildContext context, HomeInsight insight) {
@@ -161,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (item != null) _openDetail(context, item);
       return;
     }
-    MainShell.of(context).openItemsFilter('all');
+    MainShell.of(context).openItems();
   }
 
   Future<void> _openLogin(BuildContext context) async {
@@ -169,7 +349,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
     ).push<bool>(MaterialPageRoute<bool>(builder: (_) => const LoginScreen()));
     if (synced == true && context.mounted) {
-      showAppSnack(context, '游客数据已同步到云端，本机游客副本已清理');
+      MainShell.of(context).selectTab(0);
+      showAppSnack(context, '登录成功');
     }
   }
 
@@ -220,9 +401,9 @@ class _HomeScreenState extends State<HomeScreen> {
               if (item.usageMode == 'manual')
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.add_task_rounded,
-                    color: appPrimary,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   title: const Text('记录一次使用'),
                   subtitle: Text(
@@ -270,6 +451,8 @@ class _QuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = AppThemeTokens.of(context).softPrimary;
     return SoftCard(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 17),
       child: Row(
@@ -277,9 +460,9 @@ class _QuickActions extends StatelessWidget {
           Expanded(
             child: IconShortcut(
               icon: Icons.home_work_outlined,
-              label: '收纳屋',
-              color: const Color(0xFF4B9F91),
-              backgroundColor: const Color(0xFFE7F5F2),
+              label: '归处',
+              color: primary,
+              backgroundColor: softPrimary,
               onTap: onStorage,
             ),
           ),
@@ -287,20 +470,191 @@ class _QuickActions extends StatelessWidget {
             child: IconShortcut(
               icon: Icons.favorite_border_rounded,
               label: '心愿匣',
-              color: const Color(0xFFC6657D),
-              backgroundColor: const Color(0xFFFAEDF2),
+              color: primary,
+              backgroundColor: softPrimary,
               onTap: onWishlist,
             ),
           ),
           Expanded(
             child: IconShortcut(
               icon: Icons.recycling_rounded,
-              label: '回血计划',
-              color: const Color(0xFFC28B35),
-              backgroundColor: const Color(0xFFFBF3DF),
+              label: '惜物',
+              color: primary,
+              backgroundColor: softPrimary,
               onTap: onRecovery,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
+    required this.isGuest,
+    required this.guestAddsRemaining,
+    required this.onLogin,
+  });
+
+  final bool isGuest;
+  final int guestAddsRemaining;
+  final VoidCallback onLogin;
+
+  @override
+  Widget build(BuildContext context) {
+    final hour = DateTime.now().hour;
+    final greeting = switch (hour) {
+      < 6 => '夜深了',
+      < 11 => '早上好',
+      < 14 => '中午好',
+      < 18 => '下午好',
+      _ => '晚上好',
+    };
+    final now = DateTime.now();
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$greeting，匣中今日如何？',
+                    style: const TextStyle(
+                      fontFamily: 'Songti SC',
+                      fontSize: 25,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${now.month} 月 ${now.day} 日 · 星期${weekdays[now.weekday - 1]}',
+                    style: const TextStyle(
+                      color: appMuted,
+                      fontSize: 10,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset(
+                'static/image/app-icon-192.png',
+                width: 48,
+                height: 48,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ],
+        ),
+        if (isGuest) ...[
+          const SizedBox(height: 13),
+          Material(
+            color: primary.withValues(alpha: 0.075),
+            borderRadius: BorderRadius.circular(15),
+            child: InkWell(
+              onTap: onLogin,
+              borderRadius: BorderRadius.circular(15),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(11, 9, 10, 9),
+                child: Row(
+                  children: [
+                    Icon(Icons.cloud_off_rounded, size: 16, color: primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        guestAddsRemaining == 0
+                            ? '本机游客 · 添加次数已用完'
+                            : '本机游客 · 还可添加 $guestAddsRemaining 次',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '登录',
+                      style: TextStyle(
+                        color: primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, size: 16, color: primary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _FirstRecordGuide extends StatelessWidget {
+  const _FirstRecordGuide();
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = AppThemeTokens.of(context).softPrimary;
+    const entries = [
+      (Icons.photo_camera_outlined, '今天拍下的样子', '照片会成为每次回看的起点'),
+      (Icons.timeline_rounded, '一条使用轨迹', '看见它真正参与生活的多少天'),
+      (Icons.auto_graph_rounded, '一份日常价值', '把价格换算成每天真实的陪伴'),
+    ];
+    return SoftCard(
+      padding: const EdgeInsets.fromLTRB(17, 15, 17, 15),
+      child: Column(
+        children: [
+          for (var index = 0; index < entries.length; index++) ...[
+            Row(
+              children: [
+                Container(
+                  width: 37,
+                  height: 37,
+                  decoration: BoxDecoration(
+                    color: softPrimary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(entries[index].$1, size: 18, color: primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entries[index].$2,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        entries[index].$3,
+                        style: const TextStyle(color: appMuted, fontSize: 9),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (index < entries.length - 1) const SizedBox(height: 12),
+          ],
         ],
       ),
     );

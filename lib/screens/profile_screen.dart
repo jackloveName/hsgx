@@ -1,12 +1,15 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
+import '../app.dart';
 import '../app_store.dart';
 import '../components/app_menu_tile.dart';
 import '../components/icon_shortcut.dart';
+import '../components/local_data_status_banner.dart';
+import '../components/stored_image.dart';
 import '../models.dart';
+import '../theme.dart';
 import '../widgets.dart';
+import 'account_security_screen.dart';
 import 'badges_screen.dart';
 import 'collection_screen.dart';
 import 'login_screen.dart';
@@ -25,6 +28,8 @@ class ProfileScreen extends StatelessWidget {
       animation: AppStore.instance,
       builder: (context, _) {
         final store = AppStore.instance;
+        final primary = Theme.of(context).colorScheme.primary;
+        final softPrimary = AppThemeTokens.of(context).softPrimary;
         return AppBackdrop(
           child: SafeArea(
             bottom: false,
@@ -32,20 +37,37 @@ class ProfileScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 22, 20, 116),
                 children: [
+                  const Text(
+                    '拾花人',
+                    style: TextStyle(
+                      fontFamily: 'Songti SC',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    '把值得留下的日子，一物一物拾进匣中',
+                    style: TextStyle(color: appMuted, fontSize: 10),
+                  ),
+                  const SizedBox(height: 16),
                   GradientCard(
-                    colors: const [Color(0xFF61CBB4), Color(0xFF6A9DE8)],
                     padding: const EdgeInsets.all(22),
                     child: Stack(
                       children: [
                         Positioned(
                           right: -42,
                           bottom: -44,
-                          child: Opacity(
-                            opacity: 0.11,
-                            child: Image.asset(
-                              'static/image/app-icon-192.png',
-                              width: 170,
-                              height: 170,
+                          child: ClipOval(
+                            child: Opacity(
+                              opacity: 0.07,
+                              child: Image.asset(
+                                'static/image/app-icon-192.png',
+                                width: 170,
+                                height: 170,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                         ),
@@ -66,8 +88,12 @@ class ProfileScreen extends StatelessWidget {
                                   child: ClipOval(
                                     child: _ProfileAvatar(
                                       path: store.accountAvatarPath,
-                                      fallback:
-                                          store.displayName.characters.first,
+                                      fallback: store.displayName.trim().isEmpty
+                                          ? '拾'
+                                          : store.displayName
+                                                .trim()
+                                                .characters
+                                                .first,
                                     ),
                                   ),
                                 ),
@@ -87,33 +113,11 @@ class ProfileScreen extends StatelessWidget {
                                               fontWeight: FontWeight.w800,
                                             ),
                                           ),
-                                          if (!store.isGuest) ...[
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 3,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white24,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: const Text(
-                                                '云端同步',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 9,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
                                         ],
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '已登记 ${store.items.length} 件物品',
+                                        '已拾入 ${store.items.length} 件物',
                                         style: const TextStyle(
                                           color: Colors.white70,
                                           fontSize: 11,
@@ -124,12 +128,23 @@ class ProfileScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            if (store.hasForeignCurrencyItems) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                '金额统计仅合计人民币，另有 '
+                                '${store.foreignCurrencyItemCount} 件外币物品',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 20),
                             Row(
                               children: [
                                 Expanded(
                                   child: _ProfileValue(
-                                    label: '总花费',
+                                    label: '入匣花费',
                                     value:
                                         '¥${formatMoney(store.totalPurchaseValue)}',
                                   ),
@@ -137,7 +152,7 @@ class ProfileScreen extends StatelessWidget {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _ProfileValue(
-                                    label: '已回血',
+                                    label: '净回血',
                                     value:
                                         '¥${formatMoney(store.recoveredAmount)}',
                                     onTap: () => _push(
@@ -149,66 +164,105 @@ class ProfileScreen extends StatelessWidget {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _ProfileValue(
-                                    label: '当前资产',
+                                    label: '匣中估值',
                                     value:
                                         '¥${formatMoney(store.totalCurrentValue, compact: true)}',
                                   ),
                                 ),
                               ],
                             ),
+                            if (store.isGuest) ...[
+                              const SizedBox(height: 15),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.fromLTRB(
+                                  13,
+                                  10,
+                                  8,
+                                  10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.13),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 34,
+                                      height: 34,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.14,
+                                        ),
+                                        borderRadius: BorderRadius.circular(11),
+                                      ),
+                                      child: const Icon(
+                                        Icons.cloud_off_rounded,
+                                        color: Colors.white,
+                                        size: 17,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            '游客记录保存在本机',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            store.guestExpiryWarning
+                                                ? '本地数据即将到期 · 还可添加 '
+                                                      '${store.guestAddsRemaining} 次'
+                                                : '还可添加 '
+                                                      '${store.guestAddsRemaining} 次',
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _openLogin(context),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        minimumSize: const Size(0, 34),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 9,
+                                        ),
+                                        backgroundColor: Colors.white
+                                            .withValues(alpha: 0.13),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            11,
+                                          ),
+                                        ),
+                                        textStyle: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      child: const Text('登录继续'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],
                     ),
                   ),
-                  if (store.isGuest) ...[
-                    const SizedBox(height: 14),
-                    SoftCard(
-                      color: const Color(0xFFFFFBF2),
-                      borderColor: const Color(0xFFF2E2BE),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.cloud_off_rounded,
-                                color: Color(0xFFC28B35),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 9),
-                              Expanded(
-                                child: Text(
-                                  '游客模式',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 7),
-                          Text(
-                            '还可添加 ${store.guestAddsRemaining} 次物品。'
-                            '游客记录只保存在本机，登录后会先上传云端，'
-                            '同步成功后再清除本机游客副本。',
-                            style: const TextStyle(
-                              color: appMuted,
-                              fontSize: 11,
-                              height: 1.55,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          PrimaryButton(
-                            label: '登录并同步',
-                            icon: Icons.cloud_sync_outlined,
-                            onPressed: () => _openLogin(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  const LocalDataStatusBanner(margin: EdgeInsets.only(top: 12)),
                   const SizedBox(height: 16),
                   SoftCard(
                     padding: const EdgeInsets.symmetric(vertical: 17),
@@ -218,28 +272,28 @@ class ProfileScreen extends StatelessWidget {
                           child: IconShortcut(
                             label: '心愿匣',
                             icon: Icons.favorite_rounded,
-                            color: const Color(0xFFC6657D),
-                            backgroundColor: const Color(0xFFFAEDF2),
+                            color: primary,
+                            backgroundColor: softPrimary,
                             compact: true,
                             onTap: () => _push(context, const WishlistScreen()),
                           ),
                         ),
                         Expanded(
                           child: IconShortcut(
-                            label: '徽章',
+                            label: '匣光',
                             icon: Icons.workspace_premium_rounded,
-                            color: const Color(0xFFC28B35),
-                            backgroundColor: const Color(0xFFFBF3DF),
+                            color: primary,
+                            backgroundColor: softPrimary,
                             compact: true,
                             onTap: () => _push(context, const BadgesScreen()),
                           ),
                         ),
                         Expanded(
                           child: IconShortcut(
-                            label: '收藏馆',
+                            label: '珍爱',
                             icon: Icons.auto_awesome_rounded,
-                            color: const Color(0xFF806CC2),
-                            backgroundColor: const Color(0xFFF1EEF9),
+                            color: primary,
+                            backgroundColor: softPrimary,
                             compact: true,
                             onTap: () =>
                                 _push(context, const CollectionScreen()),
@@ -248,6 +302,36 @@ class ProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (store.isAuthenticated) ...[
+                    const SectionHeading(title: '账号'),
+                    SoftCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 5,
+                      ),
+                      child: Column(
+                        children: [
+                          AppMenuTile(
+                            title: '个人信息',
+                            icon: Icons.badge_outlined,
+                            iconColor: primary,
+                            iconBackground: softPrimary,
+                            onTap: () =>
+                                _push(context, const ProfileEditScreen()),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFF1EDE7)),
+                          AppMenuTile(
+                            title: '账号与安全',
+                            icon: Icons.security_rounded,
+                            iconColor: primary,
+                            iconBackground: softPrimary,
+                            onTap: () =>
+                                _push(context, const AccountSecurityScreen()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SectionHeading(title: '应用与数据'),
                   SoftCard(
                     padding: const EdgeInsets.symmetric(
@@ -256,22 +340,11 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        if (store.isAuthenticated) ...[
-                          AppMenuTile(
-                            title: '个人信息',
-                            icon: Icons.badge_outlined,
-                            iconColor: const Color(0xFF3A9D8A),
-                            iconBackground: const Color(0xFFE7F6F1),
-                            onTap: () =>
-                                _push(context, const ProfileEditScreen()),
-                          ),
-                          const Divider(height: 1, color: Color(0xFFF1EDE7)),
-                        ],
                         AppMenuTile(
                           title: '皮肤选择',
                           icon: Icons.palette_outlined,
-                          iconColor: const Color(0xFF8B78C9),
-                          iconBackground: const Color(0xFFF1EEF9),
+                          iconColor: primary,
+                          iconBackground: softPrimary,
                           value: store.skinIndex < 0
                               ? '跟随系统'
                               : appSkinAt(store.skinIndex).name,
@@ -281,8 +354,8 @@ class ProfileScreen extends StatelessWidget {
                         AppMenuTile(
                           title: '隐私与协议',
                           icon: Icons.lock_outline_rounded,
-                          iconColor: const Color(0xFF607FC7),
-                          iconBackground: const Color(0xFFEDF2FB),
+                          iconColor: primary,
+                          iconBackground: softPrimary,
                           onTap: () => _push(context, const PrivacyScreen()),
                         ),
                       ],
@@ -313,7 +386,8 @@ class ProfileScreen extends StatelessWidget {
       context,
     ).push<bool>(MaterialPageRoute<bool>(builder: (_) => const LoginScreen()));
     if (synced == true && context.mounted) {
-      showAppSnack(context, '游客数据已同步到云端，本机游客副本已清理');
+      MainShell.of(context).selectTab(0);
+      showAppSnack(context, '登录成功，本机记录继续保存在当前设备');
     }
   }
 }
@@ -327,21 +401,7 @@ class _ProfileAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clean = path.trim();
-    if (clean.startsWith('http://') || clean.startsWith('https://')) {
-      return Image.network(
-        clean,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _letter(),
-      );
-    }
-    if (clean.isNotEmpty) {
-      return Image.file(
-        File(clean),
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _letter(),
-      );
-    }
-    return _letter();
+    return StoredImage(path: clean, fit: BoxFit.cover, fallback: _letter());
   }
 
   Widget _letter() {

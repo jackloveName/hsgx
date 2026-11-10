@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/app_config.dart';
 import 'api/api_client.dart';
 import 'api/api_settings.dart';
 import 'api/config_api.dart';
@@ -15,10 +16,6 @@ class AgreementService {
 
   static const privacyKey = ApiSettings.privacyProtocolKey;
   static const registerKey = ApiSettings.registerProtocolKey;
-  static const _legacyKeys = {
-    ApiSettings.privacyProtocolKey: 'HSGX_PRIVACY_PROTOC',
-    ApiSettings.registerProtocolKey: 'HSGX_REGISTER_PROTOC',
-  };
   static const _cacheDuration = Duration(minutes: 5);
   static final Map<String, ({String content, DateTime cachedAt})> _cache = {};
 
@@ -32,16 +29,15 @@ class AgreementService {
         DateTime.now().difference(cached.cachedAt) < _cacheDuration) {
       return cached.content;
     }
-    var response = await _config.readPublic(key);
-    var text = _extractText(response).trim();
-    final fallbackKey = _legacyKeys[key];
-    if (text.isEmpty && fallbackKey != null) {
-      response = await _config.readPublic(fallbackKey);
-      text = _extractText(response).trim();
-    }
+    final response = await _config.readPublic(key);
+    final text = _extractText(response).trim();
     if (text.isEmpty) throw const FormatException('协议内容为空');
     final content = _htmlToPlainText(
-      _applyOperator(text, defaultTargetPlatform),
+      _applyOperator(
+        text,
+        operatorName: AppConfig.agreementOperatorName,
+        contactEmail: AppConfig.agreementContactEmail,
+      ),
     );
     if (content.isEmpty) throw const FormatException('协议内容为空');
     _cache[key] = (content: content, cachedAt: DateTime.now());
@@ -51,7 +47,12 @@ class AgreementService {
   void close() => _api.close();
 
   @visibleForTesting
-  static String parseResponseBody(String raw, {TargetPlatform? platform}) {
+  static String parseResponseBody(
+    String raw, {
+    TargetPlatform? platform,
+    String operatorName = AppConfig.agreementOperatorName,
+    String contactEmail = AppConfig.agreementContactEmail,
+  }) {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) throw const FormatException('协议响应格式错误');
     final body = decoded.map((key, value) => MapEntry(key.toString(), value));
@@ -62,7 +63,11 @@ class AgreementService {
     final text = _extractText(body['data'] ?? body).trim();
     if (text.isEmpty) throw const FormatException('协议内容为空');
     return _htmlToPlainText(
-      _applyOperator(text, platform ?? defaultTargetPlatform),
+      _applyOperator(
+        text,
+        operatorName: operatorName,
+        contactEmail: contactEmail,
+      ),
     );
   }
 
@@ -94,17 +99,23 @@ class AgreementService {
     return '';
   }
 
-  static String _applyOperator(String value, TargetPlatform platform) {
-    final isIOS = platform == TargetPlatform.iOS;
-    final name = isIOS ? 'Rinze Loop' : '深圳市亮任网络科技有限公司';
-    final email = isIOS
-        ? 'rinzeloop@icloud.com'
-        : 'williamchavez6095@outlook.com';
-    return value
-        .replaceAll(r'${name}', name)
-        .replaceAll(r'${email}', email)
-        .replaceAll('【运营者名称】', name)
-        .replaceAll('【联系邮箱】', email);
+  static String _applyOperator(
+    String value, {
+    required String operatorName,
+    required String contactEmail,
+  }) {
+    var result = value;
+    if (operatorName.trim().isNotEmpty) {
+      result = result
+          .replaceAll(r'${name}', operatorName.trim())
+          .replaceAll('【运营者名称】', operatorName.trim());
+    }
+    if (contactEmail.trim().isNotEmpty) {
+      result = result
+          .replaceAll(r'${email}', contactEmail.trim())
+          .replaceAll('【联系邮箱】', contactEmail.trim());
+    }
+    return result;
   }
 
   static String _htmlToPlainText(String raw) {

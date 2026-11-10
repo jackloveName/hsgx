@@ -1,11 +1,11 @@
 {
-    "name": "hsgx",
-    "short_name": "hsgx",
+    "name": "花拾归匣",
+    "short_name": "花拾归匣",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#17201E",
+    "theme_color": "#2F413A",
+    "description": "物有所归，心有所安。记录、整理并理解值得珍惜的生活物品。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

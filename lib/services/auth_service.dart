@@ -36,8 +36,13 @@ class UserProfile {
 }
 
 class AuthService {
-  AuthService({http.Client? client, ApiClient? apiClient})
-    : _api = apiClient ?? ApiClient(client: client) {
+  AuthService({
+    http.Client? client,
+    ApiClient? apiClient,
+    void Function()? onUnauthorized,
+  }) : _api =
+           apiClient ??
+           ApiClient(client: client, onUnauthorized: onUnauthorized) {
     _imageUploader = ImageUploadService(_api);
   }
 

@@ -17,10 +17,12 @@ void main() {
     final html = AgreementService.parseResponseBody(
       raw,
       platform: TargetPlatform.iOS,
+      operatorName: '花拾归匣运营者',
+      contactEmail: 'privacy@example.com',
     );
 
-    expect(html, contains('Rinze Loop'));
-    expect(html, contains('rinzeloop@icloud.com'));
+    expect(html, contains('花拾归匣运营者'));
+    expect(html, contains('privacy@example.com'));
     expect(html, isNot(contains(r'${name}')));
     expect(html, isNot(contains('<script')));
     expect(html, contains('隐私政策'));

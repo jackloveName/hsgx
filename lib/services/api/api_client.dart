@@ -161,9 +161,13 @@ class ApiClient {
       onUnauthorized?.call();
       throw ApiException('登录状态已失效，请重新登录', code: code, unauthorized: true);
     }
-    if (response.statusCode >= 400 && map == null) {
+    if (response.statusCode >= 400) {
       throw ApiException(
-        silent ? 'HTTP ${response.statusCode}' : '请求失败（${response.statusCode}）',
+        message.isNotEmpty
+            ? message
+            : silent
+            ? 'HTTP ${response.statusCode}'
+            : '请求失败（${response.statusCode}）',
         code: '${response.statusCode}',
       );
     }

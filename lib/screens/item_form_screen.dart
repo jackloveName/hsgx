@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_store.dart';
+import '../components/stored_image.dart';
 import '../models.dart';
 import '../storage/local_image_store.dart';
 import '../widgets.dart';
@@ -24,7 +26,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   late final TextEditingController _name;
   late final TextEditingController _price;
   late final TextEditingController _currentValue;
-  late final TextEditingController _quantity;
+  late int _quantityValue;
   late final TextEditingController _usageCount;
   late final TextEditingController _targetDays;
   late final TextEditingController _note;
@@ -74,7 +76,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     _currentValue = TextEditingController(
       text: item == null ? '' : formatMoney(item.currentValue),
     );
-    _quantity = TextEditingController(text: '${item?.quantity ?? 1}');
+    _quantityValue = math.max(1, item?.quantity.round() ?? 1);
     _usageCount = TextEditingController(text: '${item?.manualUsageCount ?? 0}');
     _targetDays = TextEditingController(
       text: item == null || item.targetUseDays == 0
@@ -106,6 +108,11 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     _tags = List<String>.from(item?.tags ?? const []);
     _imagePaths = List<String>.from(item?.imagePaths ?? const []);
     _initialImagePaths = List<String>.from(_imagePaths);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _recoverLostImages();
+      });
+    }
   }
 
   @override
@@ -120,7 +127,6 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     _name.dispose();
     _price.dispose();
     _currentValue.dispose();
-    _quantity.dispose();
     _usageCount.dispose();
     _targetDays.dispose();
     _note.dispose();
@@ -135,7 +141,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     final category = categoryById(_category);
     final currency = currencyByCode(_currency);
     return PageFrame(
-      title: _editing ? '编辑物品' : '新增物品',
+      title: _editing ? '整理这件物' : '拾一件',
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
       child: Form(
         key: _formKey,
@@ -301,15 +307,19 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                     controller: _targetDays,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: '目标使用天数（选填）',
-                      hintText: '例如：730',
+                    decoration: InputDecoration(
+                      labelText: _usageMode == 'manual'
+                          ? '目标使用次数（选填）'
+                          : '目标使用天数（选填）',
+                      hintText: _usageMode == 'manual' ? '例如：100' : '例如：730',
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) return null;
                       final number = int.tryParse(value);
                       return number == null || number <= 0
-                          ? '目标天数必须大于 0'
+                          ? _usageMode == 'manual'
+                                ? '目标次数必须大于 0'
+                                : '目标天数必须大于 0'
                           : null;
                     },
                   ),
@@ -348,7 +358,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                             labelText: '购入价（$_currency）',
                             prefixText: '${currency.symbol} ',
                           ),
-                          validator: _validateNonNegativeAmount,
+                          validator: _validatePurchasePrice,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -371,19 +381,36 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          controller: _quantity,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
+                        child: InputDecorator(
                           decoration: const InputDecoration(labelText: '数量'),
-                          validator: (value) {
-                            final number = int.tryParse(value ?? '');
-                            return number == null || number < 1
-                                ? '数量至少为 1'
-                                : null;
-                          },
+                          child: Row(
+                            children: [
+                              _QuantityButton(
+                                key: const Key('quantity-minus'),
+                                icon: Icons.remove_rounded,
+                                onTap: _quantityValue > 1
+                                    ? () => setState(() => _quantityValue -= 1)
+                                    : null,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  '$_quantityValue',
+                                  key: const Key('quantity-value'),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              _QuantityButton(
+                                key: const Key('quantity-plus'),
+                                icon: Icons.add_rounded,
+                                onTap: () =>
+                                    setState(() => _quantityValue += 1),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -626,12 +653,49 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
             ];
       if (picked.isEmpty) return;
       final added = <String>[];
-      for (final photo in picked.take(remaining)) {
-        added.add(await LocalImageStore.instance.persist(photo));
+      try {
+        for (final photo in picked.take(remaining)) {
+          added.add(await LocalImageStore.instance.persist(photo));
+        }
+      } catch (_) {
+        for (final path in added) {
+          try {
+            await LocalImageStore.instance.delete(path);
+          } on Object {
+            // Keep the original photo error as the user-facing failure.
+          }
+        }
+        rethrow;
       }
       if (mounted) setState(() => _imagePaths.addAll(added));
     } catch (_) {
       if (mounted) showAppSnack(context, '照片选择失败，请检查相册或相机权限');
+    }
+  }
+
+  Future<void> _recoverLostImages() async {
+    if (!mounted) return;
+    try {
+      final response = await ImagePicker().retrieveLostData();
+      if (response.isEmpty) return;
+      if (response.exception != null) {
+        if (mounted) showAppSnack(context, '上次选择的照片未能恢复，请重新选择');
+        return;
+      }
+      final files =
+          response.files ?? [if (response.file != null) response.file!];
+      if (files.isEmpty) return;
+      final remaining = 9 - _imagePaths.length;
+      if (remaining <= 0) return;
+      final recovered = <String>[];
+      for (final photo in files.take(remaining)) {
+        recovered.add(await LocalImageStore.instance.persist(photo));
+      }
+      if (mounted && recovered.isNotEmpty) {
+        setState(() => _imagePaths.addAll(recovered));
+      }
+    } on Object {
+      if (mounted) showAppSnack(context, '上次选择的照片未能恢复，请重新选择');
     }
   }
 
@@ -646,12 +710,13 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   Future<void> _choosePurchaseDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showAppDatePicker(
+      context,
       initialDate: parseDate(_purchaseDate) ?? now,
       firstDate: DateTime(1990),
       lastDate: now,
-      helpText: '选择购入日期',
+      title: '选择购入日期',
+      confirmLabel: '确定购入日期',
     );
     if (picked != null) {
       setState(() => _purchaseDate = formatDate(picked));
@@ -660,13 +725,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   Future<void> _chooseWarrantyDate() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showAppDatePicker(
+      context,
       initialDate:
           parseDate(_warrantyEndDate) ?? now.add(const Duration(days: 365)),
       firstDate: DateTime(2000),
       lastDate: DateTime(now.year + 20),
-      helpText: '选择到期日期',
+      title: '选择保修到期日期',
+      confirmLabel: '确定到期日期',
     );
     if (picked != null) {
       setState(() => _warrantyEndDate = formatDate(picked));
@@ -693,6 +759,11 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     return amount == null || amount < 0 ? '请输入有效金额' : null;
   }
 
+  String? _validatePurchasePrice(String? value) {
+    if (value == null || value.trim().isEmpty) return '请输入购入价';
+    return _validateNonNegativeAmount(value);
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
@@ -700,7 +771,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     final price = double.tryParse(_price.text.replaceAll(',', '')) ?? 0;
     final current =
         double.tryParse(_currentValue.text.replaceAll(',', '')) ?? price;
-    final quantity = int.tryParse(_quantity.text) ?? 1;
+    final quantity = _quantityValue;
     final original = widget.initial;
     final history = List<StatusEvent>.from(
       original?.statusHistory ??
@@ -759,7 +830,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       disposalPlatform: original?.disposalPlatform ?? '',
       disposalContact: original?.disposalContact ?? '',
       disposalPrice: original?.disposalPrice ?? 0,
+      disposalCost: original?.disposalCost ?? 0,
       processDate: original?.processDate ?? '',
+      recoveryMethod: original?.recoveryMethod ?? '',
+      recoveryTargetPrice: original?.recoveryTargetPrice ?? 0,
+      recoveryDeadline: original?.recoveryDeadline ?? '',
+      recoveryPlatform: original?.recoveryPlatform ?? '',
+      recoveryContact: original?.recoveryContact ?? '',
+      recoveryNote: original?.recoveryNote ?? '',
     );
     try {
       if (original == null) {
@@ -780,7 +858,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       }
       if (!mounted) return;
       Navigator.of(context).pop();
-      showAppSnack(context, original == null ? '已放入收纳匣' : '物品已更新');
+      showAppSnack(context, original == null ? '已拾入匣中' : '物品已更新');
     } catch (error) {
       if (mounted) {
         showAppSnack(context, error.toString().replaceFirst('Bad state: ', ''));
@@ -804,6 +882,27 @@ class _FieldLabel extends StatelessWidget {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: appMuted,
+      ),
+    );
+  }
+}
+
+class _QuantityButton extends StatelessWidget {
+  const _QuantityButton({super.key, required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: IconButton.filledTonal(
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        icon: Icon(icon, size: 16),
       ),
     );
   }
@@ -970,21 +1069,11 @@ class _StoredImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cacheSize = (size * MediaQuery.devicePixelRatioOf(context)).round();
-    if (path.startsWith('blob:') ||
-        path.startsWith('http:') ||
-        path.startsWith('https:')) {
-      return Image.network(
-        path,
-        fit: BoxFit.cover,
-        cacheWidth: cacheSize,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      );
-    }
-    return Image.file(
-      File(path),
+    return StoredImage(
+      path: path,
       fit: BoxFit.cover,
       cacheWidth: cacheSize,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      fallback: const SizedBox.shrink(),
     );
   }
 }

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models.dart';
+import '../services/agreement_page_launcher.dart';
+import '../services/agreement_service.dart';
 import '../storage/privacy_consent_store.dart';
 import 'privacy_screen.dart';
 
@@ -29,7 +31,12 @@ class _PrivacyGateState extends State<PrivacyGate> {
   }
 
   Future<void> _loadConsent() async {
-    final accepted = await PrivacyConsentStore.hasCurrentConsent();
+    var accepted = false;
+    try {
+      accepted = await PrivacyConsentStore.hasCurrentConsent();
+    } on Object {
+      accepted = false;
+    }
     if (!mounted) return;
     setState(() {
       _accepted = accepted;
@@ -246,9 +253,13 @@ class _PrivacyGateState extends State<PrivacyGate> {
   }
 
   Future<void> _accept() async {
-    await PrivacyConsentStore.accept();
-    if (!mounted) return;
-    setState(() => _accepted = true);
+    try {
+      await PrivacyConsentStore.accept();
+      if (!mounted) return;
+      setState(() => _accepted = true);
+    } on Object {
+      if (mounted) setState(() => _blocked = true);
+    }
   }
 
   Future<void> _refuse() async {
@@ -277,7 +288,11 @@ class _PrivacyGateState extends State<PrivacyGate> {
     setState(() => _blocked = true);
   }
 
-  void _openAgreement(int initialIndex) {
+  Future<void> _openAgreement(int initialIndex) async {
+    final key = initialIndex == 0
+        ? AgreementService.privacyKey
+        : AgreementService.registerKey;
+    if (await AgreementPageLauncher.open(key) || !mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PrivacyScreen(initialIndex: initialIndex),

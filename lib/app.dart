@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app_store.dart';
-import 'components/items_filter_controller.dart';
 import 'screens/home_screen.dart';
 import 'screens/insights_screen.dart';
 import 'screens/item_form_screen.dart';
@@ -10,6 +10,7 @@ import 'screens/login_screen.dart';
 import 'screens/privacy_gate.dart';
 import 'screens/profile_screen.dart';
 import 'theme.dart';
+import 'widgets.dart';
 
 class HsgxApp extends StatefulWidget {
   const HsgxApp({super.key});
@@ -20,11 +21,13 @@ class HsgxApp extends StatefulWidget {
 
 class _HsgxAppState extends State<HsgxApp> with WidgetsBindingObserver {
   late Brightness _platformBrightness;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AppStore.instance.addListener(_handleGlobalNotice);
     _platformBrightness =
         WidgetsBinding.instance.platformDispatcher.platformBrightness;
   }
@@ -32,7 +35,20 @@ class _HsgxAppState extends State<HsgxApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AppStore.instance.removeListener(_handleGlobalNotice);
     super.dispose();
+  }
+
+  void _handleGlobalNotice() {
+    final notice = AppStore.instance.consumeGlobalNotice();
+    if (notice == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext != null) {
+        showAppSnack(navigatorContext, notice);
+      }
+    });
   }
 
   @override
@@ -55,9 +71,65 @@ class _HsgxAppState extends State<HsgxApp> with WidgetsBindingObserver {
         return MaterialApp(
           title: '花拾归匣',
           debugShowCheckedModeBanner: false,
+          navigatorKey: _navigatorKey,
           theme: buildAppTheme(resolvedSkinIndex),
-          home: const PrivacyGate(child: MainShell()),
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: const [Locale('zh', 'CN')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const PrivacyGate(child: StartupGate()),
         );
+      },
+    );
+  }
+}
+
+class StartupGate extends StatefulWidget {
+  const StartupGate({super.key});
+
+  @override
+  State<StartupGate> createState() => _StartupGateState();
+}
+
+class _StartupGateState extends State<StartupGate> {
+  bool _enteredAsGuest = false;
+  late bool _wasAuthenticated;
+
+  @override
+  void initState() {
+    super.initState();
+    _wasAuthenticated = AppStore.instance.isAuthenticated;
+    AppStore.instance.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    AppStore.instance.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    final authenticated = AppStore.instance.isAuthenticated;
+    final sessionEnded = _wasAuthenticated && !authenticated;
+    _wasAuthenticated = authenticated;
+    if (sessionEnded && mounted) {
+      setState(() => _enteredAsGuest = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = AppStore.instance;
+    if (store.isAuthenticated || _enteredAsGuest) {
+      return const MainShell();
+    }
+    return LoginScreen(
+      onComplete: () {
+        if (!mounted) return;
+        setState(() => _enteredAsGuest = true);
       },
     );
   }
@@ -76,7 +148,6 @@ class MainShell extends StatefulWidget {
 
 class MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int currentIndex = 0;
-  final _itemsFilterController = ItemsFilterController();
 
   static const _labels = ['首页', '物品', '洞察', '我的'];
   static const _icons = [
@@ -99,8 +170,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final notice = AppStore.instance.consumeGuestDataNotice();
       if (notice != null && mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(notice)));
+        showAppSnack(context, notice);
       }
     });
   }
@@ -108,7 +178,6 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _itemsFilterController.dispose();
     super.dispose();
   }
 
@@ -117,9 +186,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (state != AppLifecycleState.resumed) return;
     AppStore.instance.expireGuestDataIfNeeded().then((expired) {
       if (expired && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('游客数据已达到 3 天保存期限，已自动清理')));
+        showAppSnack(context, '游客数据已达到 3 天保存期限，已自动清理');
       }
     });
   }
@@ -128,8 +195,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => currentIndex = index);
   }
 
-  void openItemsFilter(String filter) {
-    _itemsFilterController.value = filter;
+  void openItems() {
     selectTab(1);
   }
 
@@ -150,7 +216,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
         title: const Text('游客添加次数已用完'),
         content: const Text(
           '游客模式最多可添加 3 次物品。登录后可以不限次数记录，'
-          '当前游客数据会在同步成功后迁移到云端。',
+          '现有记录不会丢失。',
         ),
         actions: [
           TextButton(
@@ -159,7 +225,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('登录并同步'),
+            child: const Text('登录继续'),
           ),
         ],
       ),
@@ -168,22 +234,22 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     final synced = await Navigator.of(context)
         .push<bool>(MaterialPageRoute(builder: (_) => const LoginScreen()));
     if (synced == true && mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('登录成功，游客数据已同步到云端')));
+      selectTab(0);
+      showAppSnack(context, '登录成功');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      HomeScreen(),
-      ItemsScreen(filterController: _itemsFilterController),
-      const InsightsScreen(),
-      const ProfileScreen(),
-    ];
     return AnimatedBuilder(
       animation: AppStore.instance,
       builder: (context, _) {
+        final pages = [
+          HomeScreen(),
+          const ItemsScreen(),
+          const InsightsScreen(),
+          const ProfileScreen(),
+        ];
         return Scaffold(
           extendBody: true,
           backgroundColor: Colors.transparent,
@@ -194,7 +260,7 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
             child: FloatingActionButton(
               onPressed: openAddItem,
               elevation: 8,
-              tooltip: '添加物品',
+              tooltip: '拾一件',
               backgroundColor: Theme.of(context).colorScheme.primary,
               shape: const CircleBorder(),
               child: const Icon(
@@ -236,13 +302,16 @@ class _Dock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.97),
-        border: const Border(top: BorderSide(color: Color(0xFFF0EAE1))),
+        color: scheme.surface.withValues(alpha: 0.98),
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF42392D).withValues(alpha: 0.07),
+            color: scheme.shadow.withValues(alpha: 0.07),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -290,9 +359,10 @@ class _DockItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final color = selected
-        ? Theme.of(context).colorScheme.primary
-        : const Color(0xFF8E8990);
+        ? scheme.primary
+        : scheme.onSurface.withValues(alpha: 0.55);
     return InkResponse(
       onTap: onTap,
       radius: 30,
@@ -303,14 +373,30 @@ class _DockItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
+              decoration: BoxDecoration(
+                color: selected
+                    ? scheme.primary.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 22, color: color),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

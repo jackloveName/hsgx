@@ -49,16 +49,23 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
         final selectedItems = store.items
             .where((entry) => _selected.contains(entry.id))
             .toList();
+        final selectedCostItems = selectedItems
+            .where(
+              (entry) =>
+                  entry.purchaseCurrency.toUpperCase() ==
+                  item.purchaseCurrency.toUpperCase(),
+            )
+            .toList();
         final candidates = store.items
-            .where((entry) => entry.id != item.id && entry.status != 'retired')
+            .where((entry) => entry.id != item.id && entry.isActive)
             .toList();
         final usageDaily = [
           item,
-          ...selectedItems,
+          ...selectedCostItems,
         ].fold<double>(0, (sum, entry) => sum + entry.usageDailyCost);
         final ownedDaily = [
           item,
-          ...selectedItems,
+          ...selectedCostItems,
         ].fold<double>(0, (sum, entry) => sum + entry.ownedDailyCost);
         return PageFrame(
           title: '关联物品',
@@ -66,10 +73,6 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               GradientCard(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  const Color(0xFF6C9FE8),
-                ],
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

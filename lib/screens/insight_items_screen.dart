@@ -154,6 +154,7 @@ class _InsightItemsScreenState extends State<InsightItemsScreen> {
         return end != null && end.isBefore(startOfToday);
       }).toList(),
       'low-stock' => source.where((item) {
+        if (item.status != 'inuse') return false;
         final initial = double.tryParse(
           item.netWeight.replaceAll(RegExp(r'[^0-9.]'), ''),
         );

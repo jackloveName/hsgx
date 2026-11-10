@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -8,21 +9,35 @@ import 'services/cloud_sync_service.dart';
 import 'storage/app_state_storage.dart';
 import 'storage/default_app_state_storage.dart';
 import 'storage/local_image_store.dart';
+import 'storage/session_token_store.dart';
 
 class AppStore extends ChangeNotifier {
-  AppStore({AppStateStorage? storage})
-    : _storage = storage ?? createDefaultAppStateStorage();
+  AppStore({
+    AppStateStorage? storage,
+    SessionTokenStore? tokenStore,
+    CloudSyncService? cloudService,
+  }) : _storage = storage ?? createDefaultAppStateStorage(),
+       _tokenStore =
+           tokenStore ??
+           (storage == null
+               ? const SecureSessionTokenStore()
+               : MemorySessionTokenStore()) {
+    _cloudService =
+        cloudService ?? CloudSyncService(onUnauthorized: handleUnauthorized);
+  }
 
   static final AppStore instance = AppStore();
   static const _storageKey = 'hsgx_flutter_state_v1';
   static const _backupKey = '${_storageKey}_backup';
-  static const _schemaVersion = 5;
+  static const _schemaVersion = 7;
   static const guestRetention = Duration(days: 3);
   static const guestAddLimit = 3;
 
   final AppStateStorage _storage;
-  final CloudSyncService _cloudService = CloudSyncService();
+  final SessionTokenStore _tokenStore;
+  late final CloudSyncService _cloudService;
   Future<void> _writeQueue = Future.value();
+  Future<void> _cloudSyncQueue = Future.value();
   final ValueNotifier<int> _skinNotifier = ValueNotifier(0);
 
   final List<InventoryItem> _items = [];
@@ -49,50 +64,85 @@ class AppStore extends ChangeNotifier {
   DateTime? guestStartedAt;
   int guestAddCount = 0;
   DateTime? lastCloudSyncedAt;
+  bool cloudSyncPending = false;
+  String? cloudSyncError;
   String? guestDataNotice;
+  String? _globalNotice;
   DateTime? lastSavedAt;
   String? loadError;
   String? persistenceWarning;
   bool _corruptedDataBlocked = false;
+  bool _accountCacheLocked = false;
+  bool _sessionExpiryScheduled = false;
   int _pendingWrites = 0;
+  int _dataRevision = 0;
 
   List<InventoryItem> get items => List.unmodifiable(_items);
   List<WishEntry> get wishlist => List.unmodifiable(_wishlist);
   List<String> get storageLocations => List.unmodifiable(_storageLocations);
+  List<InventoryItem> get activeItems =>
+      _items.where((item) => item.isActive).toList();
   ValueListenable<int> get skinListenable => _skinNotifier;
   bool get isSaving => _pendingWrites > 0;
+  bool get accountCacheLocked => _accountCacheLocked;
+  int get dataRevision => _dataRevision;
+  int get foreignCurrencyItemCount => _items
+      .where((item) => item.isActive && !item.canAggregateInBaseCurrency)
+      .length;
+  bool get hasForeignCurrencyItems => foreignCurrencyItemCount > 0;
+  GuestCloudData get guestCloudData {
+    if (_accountCacheLocked) {
+      return const GuestCloudData(
+        items: [],
+        wishlist: [],
+        storageLocations: [],
+      );
+    }
+    return GuestCloudData(
+      items: List<InventoryItem>.from(_items),
+      wishlist: List<WishEntry>.from(_wishlist),
+      storageLocations: List<String>.from(_storageLocations),
+    );
+  }
+
   bool get isGuest => authMode != 'account' || sessionToken.isEmpty;
   bool get isAuthenticated => !isGuest;
   String get displayName => isGuest ? '游客' : accountName;
   DateTime? get guestExpiresAt => guestStartedAt?.add(guestRetention);
-  int get guestAddsRemaining =>
-      isGuest ? math.max(0, guestAddLimit - guestAddCount) : guestAddLimit;
-  bool get canAddGuestItem => !isGuest || guestAddCount < guestAddLimit;
+  int get guestAddsRemaining => _accountCacheLocked
+      ? 0
+      : isGuest
+      ? math.max(0, guestAddLimit - guestAddCount)
+      : guestAddLimit;
+  bool get canAddGuestItem =>
+      !_accountCacheLocked && (!isGuest || guestAddCount < guestAddLimit);
   int get guestDaysRemaining {
     final expiresAt = guestExpiresAt;
-    if (!isGuest || expiresAt == null) return 0;
+    if (_accountCacheLocked || !isGuest || expiresAt == null) return 0;
     final remaining = expiresAt.difference(DateTime.now());
     return math.max(0, (remaining.inSeconds / Duration.secondsPerDay).ceil());
   }
 
-  GuestCloudData get guestCloudData => GuestCloudData(
-    items: List<InventoryItem>.from(_items),
-    wishlist: List<WishEntry>.from(_wishlist),
-    storageLocations: List<String>.from(_storageLocations),
-  );
+  bool get guestExpiryWarning =>
+      guestStartedAt != null && guestDaysRemaining <= 1;
 
-  double get totalPurchaseValue =>
-      _items.fold(0, (sum, item) => sum + item.purchaseTotal);
-  double get totalCurrentValue =>
-      _items.fold(0, (sum, item) => sum + item.currentTotal);
-  double get totalOwnedDaily =>
-      _items.fold(0, (sum, item) => sum + item.ownedDailyCost);
+  double get totalPurchaseValue => _items
+      .where((item) => item.canAggregateInBaseCurrency)
+      .fold(0, (sum, item) => sum + item.purchaseTotal);
+  double get totalCurrentValue => activeItems
+      .where((item) => item.canAggregateInBaseCurrency)
+      .fold(0, (sum, item) => sum + item.currentTotal);
+  double get totalOwnedDaily => activeItems
+      .where((item) => item.canAggregateInBaseCurrency)
+      .fold(0, (sum, item) => sum + item.ownedDailyCost);
   double get avoidedAmount => _wishlist
       .where((entry) => entry.status == 'abandoned')
       .fold(0, (sum, entry) => sum + entry.expectedPrice);
   double get recoveredAmount => _items
-      .where((item) => item.status == 'processed')
-      .fold(0, (sum, item) => sum + item.disposalPrice);
+      .where(
+        (item) => item.status == 'processed' && item.canAggregateInBaseCurrency,
+      )
+      .fold(0, (sum, item) => sum + item.cashRecoveredAmount);
 
   int countByStatus(String status) =>
       _items.where((item) => item.status == status).length;
@@ -100,6 +150,12 @@ class AppStore extends ChangeNotifier {
   String? consumeGuestDataNotice() {
     final notice = guestDataNotice;
     guestDataNotice = null;
+    return notice;
+  }
+
+  String? consumeGlobalNotice() {
+    final notice = _globalNotice;
+    _globalNotice = null;
     return notice;
   }
 
@@ -114,8 +170,21 @@ class AppStore extends ChangeNotifier {
     loadError = null;
     persistenceWarning = null;
     _corruptedDataBlocked = false;
+    _accountCacheLocked = false;
+    _dataRevision = 0;
 
-    final primary = await _storage.read(_storageKey);
+    String? primary;
+    String? backup;
+    try {
+      primary = await _storage.read(_storageKey);
+      backup = await _storage.read(_backupKey);
+    } catch (error) {
+      _corruptedDataBlocked = true;
+      loadError = '本地存储暂时无法读取，已停止写入以保护数据：$error';
+      isReady = true;
+      notifyListeners();
+      return;
+    }
     _AppSnapshot? loaded;
     var restoredFromBackup = false;
     var primaryUsesFutureSchema = false;
@@ -129,7 +198,6 @@ class AppStore extends ChangeNotifier {
       }
     }
 
-    final backup = await _storage.read(_backupKey);
     if (loaded == null &&
         !primaryUsesFutureSchema &&
         backup != null &&
@@ -145,18 +213,44 @@ class AppStore extends ChangeNotifier {
     if (loaded != null) {
       _applySnapshot(loaded);
       final now = DateTime.now();
-      if (isGuest && guestStartedAt == null) guestStartedAt = now;
+      String? storedToken;
+      var tokenStorageFailed = false;
+      try {
+        storedToken = await _tokenStore.read();
+        if ((storedToken == null || storedToken.isEmpty) &&
+            loaded.sessionToken.isNotEmpty) {
+          storedToken = loaded.sessionToken;
+          await _tokenStore.write(storedToken);
+        }
+      } on Object {
+        tokenStorageFailed = true;
+        persistenceWarning = '登录凭证读取失败，本次以游客模式启动';
+      }
+      sessionToken = storedToken?.trim() ?? '';
+      if (authMode == 'guest' && sessionToken.isNotEmpty) {
+        try {
+          await _tokenStore.clear();
+        } on Object {
+          persistenceWarning = '本机遗留登录凭证清理失败';
+        }
+        sessionToken = '';
+      }
       if (authMode == 'account' && sessionToken.isEmpty) {
-        authMode = 'guest';
-        accountPhone = '';
-        accountName = '拾花人';
-        accountAvatarPath = '';
-        accountBirthday = '';
-        accountGender = '';
+        _accountCacheLocked = true;
+        cloudSyncPending = false;
+        cloudSyncError = null;
+        loadError = tokenStorageFailed
+            ? '登录凭证暂时无法读取，账号缓存已保护，请重新登录'
+            : '登录状态已失效，账号缓存已保护，请重新登录';
+        guestDataNotice = loadError;
+      } else if (isGuest && guestStartedAt == null) {
         guestStartedAt = now;
       }
       final expired =
-          isGuest && guestExpiresAt != null && !guestExpiresAt!.isAfter(now);
+          !_accountCacheLocked &&
+          isGuest &&
+          guestExpiresAt != null &&
+          !guestExpiresAt!.isAfter(now);
       if (expired) _clearGuestData(now);
       final normalized = _encodeSnapshot();
       if (primary == null ||
@@ -170,6 +264,10 @@ class AppStore extends ChangeNotifier {
       }
       if (restoredFromBackup) {
         loadError = '主数据文件损坏，已从最近一次备份恢复';
+      }
+      if ((primary?.contains('"sessionToken"') ?? false) ||
+          (backup?.contains('"sessionToken"') ?? false)) {
+        await _storage.write(_backupKey, '');
       }
       if (expired) {
         await _storage.write(_backupKey, '');
@@ -266,6 +364,8 @@ class AppStore extends ChangeNotifier {
         map['guestStartedAt']?.toString() ?? '',
       ),
       guestAddCount: guestAddCount,
+      cloudSyncPending: map['cloudSyncPending'] == true,
+      cloudSyncError: map['cloudSyncError']?.toString(),
       lastCloudSyncedAt: DateTime.tryParse(
         map['lastCloudSyncedAt']?.toString() ?? '',
       ),
@@ -293,9 +393,10 @@ class AppStore extends ChangeNotifier {
     accountAvatarPath = snapshot.accountAvatarPath;
     accountBirthday = snapshot.accountBirthday;
     accountGender = snapshot.accountGender;
-    sessionToken = snapshot.sessionToken;
     guestStartedAt = snapshot.guestStartedAt;
     guestAddCount = snapshot.guestAddCount;
+    cloudSyncPending = snapshot.cloudSyncPending;
+    cloudSyncError = snapshot.cloudSyncError;
     lastCloudSyncedAt = snapshot.lastCloudSyncedAt;
     _skinNotifier.value = skinIndex;
   }
@@ -315,9 +416,10 @@ class AppStore extends ChangeNotifier {
           accountAvatarPath: accountAvatarPath,
           accountBirthday: accountBirthday,
           accountGender: accountGender,
-          sessionToken: sessionToken,
           guestStartedAt: guestStartedAt,
           guestAddCount: guestAddCount,
+          cloudSyncPending: cloudSyncPending,
+          cloudSyncError: cloudSyncError,
           lastCloudSyncedAt: lastCloudSyncedAt,
         );
     return jsonEncode({
@@ -332,9 +434,10 @@ class AppStore extends ChangeNotifier {
       'accountAvatarPath': snapshot.accountAvatarPath,
       'accountBirthday': snapshot.accountBirthday,
       'accountGender': snapshot.accountGender,
-      'sessionToken': snapshot.sessionToken,
       'guestStartedAt': snapshot.guestStartedAt?.toIso8601String(),
       'guestAddCount': snapshot.guestAddCount,
+      'cloudSyncPending': snapshot.cloudSyncPending,
+      'cloudSyncError': snapshot.cloudSyncError,
       'lastCloudSyncedAt': snapshot.lastCloudSyncedAt?.toIso8601String(),
     });
   }
@@ -386,8 +489,9 @@ class AppStore extends ChangeNotifier {
     String birthday = '',
     String gender = '',
   }) async {
-    await _mutate(
-      () {
+    await _tokenStore.write(token);
+    try {
+      await _mutate(() {
         _items
           ..clear()
           ..addAll(result.items);
@@ -402,6 +506,7 @@ class AppStore extends ChangeNotifier {
                 : result.storageLocations,
           );
         authMode = 'account';
+        _accountCacheLocked = false;
         accountPhone = phone;
         accountName = name;
         accountAvatarPath = avatarPath;
@@ -410,14 +515,18 @@ class AppStore extends ChangeNotifier {
         sessionToken = token;
         guestStartedAt = null;
         guestAddCount = 0;
+        loadError = null;
         lastCloudSyncedAt = result.syncedAt;
+        cloudSyncPending = false;
+        cloudSyncError = null;
         guestDataNotice =
             '已同步 ${result.items.length} 件物品'
             '${result.uploadedImageCount > 0 ? '和 ${result.uploadedImageCount} 张图片' : ''}';
-      },
-      allowCorruptedOverwrite: true,
-      syncAccount: false,
-    );
+      }, allowCorruptedOverwrite: true);
+    } catch (_) {
+      await _tokenStore.clear();
+      rethrow;
+    }
     await _storage.write(_backupKey, '');
     try {
       await LocalImageStore.instance.deleteAll();
@@ -435,6 +544,7 @@ class AppStore extends ChangeNotifier {
         ..clear()
         ..addAll(['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']);
       authMode = 'guest';
+      _accountCacheLocked = false;
       accountPhone = '';
       accountName = '拾花人';
       accountAvatarPath = '';
@@ -444,8 +554,15 @@ class AppStore extends ChangeNotifier {
       guestStartedAt = DateTime.now();
       guestAddCount = 0;
       lastCloudSyncedAt = null;
+      cloudSyncPending = false;
+      cloudSyncError = null;
       guestDataNotice = '已退出账号，当前以游客身份使用';
     }, allowCorruptedOverwrite: true);
+    try {
+      await _tokenStore.clear();
+    } on Object {
+      persistenceWarning = '本机登录凭证清理失败';
+    }
     await _storage.write(_backupKey, '');
     try {
       await LocalImageStore.instance.deleteAll();
@@ -455,13 +572,33 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void handleUnauthorized() {
+    if (isGuest || _sessionExpiryScheduled) return;
+    _sessionExpiryScheduled = true;
+    unawaited(Future<void>.microtask(_expireSession));
+  }
+
+  Future<void> _expireSession() async {
+    try {
+      await logoutToGuest();
+      _globalNotice = '登录状态已失效，请重新登录';
+      notifyListeners();
+    } finally {
+      _sessionExpiryScheduled = false;
+    }
+  }
+
   Future<void> _mutate(
     void Function() change, {
     bool allowCorruptedOverwrite = false,
     bool syncAccount = true,
+    bool backupPrevious = true,
   }) {
     if (_corruptedDataBlocked && !allowCorruptedOverwrite) {
       return Future.error(StateError('本地数据读取异常，已阻止覆盖。请保留原始数据文件并联系支持'));
+    }
+    if (_accountCacheLocked && !allowCorruptedOverwrite) {
+      return Future.error(StateError('账号登录状态不可用，本地缓存已保护，请重新登录后再修改'));
     }
     _pendingWrites += 1;
     notifyListeners();
@@ -469,12 +606,30 @@ class AppStore extends ChangeNotifier {
       final beforePayload = _encodeSnapshot();
       final before = _decodeSnapshot(beforePayload);
       final wasAuthenticated = isAuthenticated;
-      change();
       try {
-        await _persistSnapshot(_encodeSnapshot(), beforePayload);
+        change();
+      } catch (error) {
+        _applySnapshot(before);
+        _pendingWrites = math.max(0, _pendingWrites - 1);
+        notifyListeners();
+        rethrow;
+      }
+      final shouldSyncCloud =
+          syncAccount && wasAuthenticated && isAuthenticated;
+      if (shouldSyncCloud) {
+        cloudSyncPending = true;
+        cloudSyncError = null;
+      }
+      try {
+        final payload = _encodeSnapshot();
+        await _persistSnapshot(
+          payload,
+          backupPrevious ? beforePayload : payload,
+        );
         _corruptedDataBlocked = false;
         persistenceWarning = null;
         lastSavedAt = DateTime.now();
+        _dataRevision += 1;
         _skinNotifier.value = skinIndex;
       } catch (error) {
         _applySnapshot(before);
@@ -483,33 +638,102 @@ class AppStore extends ChangeNotifier {
         notifyListeners();
         rethrow;
       }
-      if (syncAccount && wasAuthenticated && isAuthenticated) {
-        try {
-          await _cloudService.replaceAccountData(
-            phone: accountPhone,
-            token: sessionToken,
-            items: List<InventoryItem>.from(_items),
-            wishlist: List<WishEntry>.from(_wishlist),
-            storageLocations: List<String>.from(_storageLocations),
-          );
-          lastCloudSyncedAt = DateTime.now();
-          final syncedPayload = _encodeSnapshot();
-          await _persistSnapshot(syncedPayload, syncedPayload);
-        } catch (error) {
-          persistenceWarning =
-              '修改已保存到本机，但云端同步失败：${error.toString().replaceFirst('Bad state: ', '')}';
-        }
-      }
       _pendingWrites = math.max(0, _pendingWrites - 1);
       notifyListeners();
+      if (shouldSyncCloud) {
+        unawaited(_scheduleCloudSync());
+      }
     });
-    _writeQueue = operation.catchError((_) {});
+    _writeQueue = operation.then<void>((_) {}).catchError((_) {});
     return operation;
   }
 
-  Future<void> applyCloudRefresh(CloudSyncResult result) async {
+  Future<void> _scheduleCloudSync() {
+    if (!isAuthenticated || _accountCacheLocked) return Future.value();
+    cloudSyncPending = true;
+    cloudSyncError = null;
+    notifyListeners();
+    final operation = _cloudSyncQueue.then((_) => _drainCloudSync());
+    _cloudSyncQueue = operation.catchError((_) {});
+    return operation;
+  }
+
+  Future<void> _drainCloudSync() async {
+    while (cloudSyncPending && isAuthenticated && !_accountCacheLocked) {
+      final revision = _dataRevision;
+      final phone = accountPhone;
+      final token = sessionToken;
+      final items = List<InventoryItem>.from(_items);
+      final wishlist = List<WishEntry>.from(_wishlist);
+      final locations = List<String>.from(_storageLocations);
+      final localImages = items
+          .expand((item) => item.imagePaths)
+          .where(
+            (path) =>
+                path.isNotEmpty &&
+                !path.startsWith('http://') &&
+                !path.startsWith('https://'),
+          )
+          .toSet();
+      try {
+        final result = await _cloudService.replaceAccountData(
+          phone: phone,
+          token: token,
+          items: items,
+          wishlist: wishlist,
+          storageLocations: locations,
+        );
+        if (!isAuthenticated || sessionToken != token) return;
+        await _writeQueue;
+        if (revision != _dataRevision) continue;
+        await _mutate(
+          () {
+            _items
+              ..clear()
+              ..addAll(result.items);
+            _wishlist
+              ..clear()
+              ..addAll(result.wishlist);
+            _storageLocations
+              ..clear()
+              ..addAll(result.storageLocations);
+            lastCloudSyncedAt = result.syncedAt;
+            cloudSyncPending = false;
+            cloudSyncError = null;
+          },
+          allowCorruptedOverwrite: true,
+          syncAccount: false,
+          backupPrevious: false,
+        );
+        for (final path in localImages) {
+          try {
+            await LocalImageStore.instance.delete(path);
+          } on Object {
+            // The synchronized record already references the remote copy.
+          }
+        }
+      } catch (error) {
+        if (!isAuthenticated || sessionToken != token) return;
+        cloudSyncPending = true;
+        cloudSyncError = error.toString().replaceFirst('Bad state: ', '');
+        await _mutate(() {}, allowCorruptedOverwrite: true, syncAccount: false);
+        return;
+      }
+    }
+  }
+
+  Future<bool> applyCloudRefresh(
+    CloudSyncResult result, {
+    int? expectedRevision,
+  }) async {
+    if (expectedRevision != null && _dataRevision != expectedRevision) {
+      return false;
+    }
     await _mutate(
       () {
+        if (expectedRevision != null && _dataRevision != expectedRevision) {
+          throw StateError('本地数据刚刚发生变化，已取消本次云端覆盖');
+        }
         _items
           ..clear()
           ..addAll(result.items);
@@ -528,6 +752,40 @@ class AppStore extends ChangeNotifier {
       allowCorruptedOverwrite: true,
       syncAccount: false,
     );
+    return true;
+  }
+
+  Future<bool> retryCloudSync() async {
+    if (isGuest || _accountCacheLocked) return false;
+    cloudSyncPending = true;
+    cloudSyncError = null;
+    await _scheduleCloudSync();
+    return !cloudSyncPending;
+  }
+
+  Future<void> purgeCloudAccountData() async {
+    if (isGuest) return;
+    final phone = accountPhone;
+    final token = sessionToken;
+    final resources = <String>[
+      for (final item in _items) ...item.imagePaths,
+      accountAvatarPath,
+    ];
+    try {
+      await _cloudService.deleteRemoteImages(resources, token: token);
+    } catch (error) {
+      throw StateError(
+        '云端图片清理失败，账号数据尚未删除：'
+        '${error.toString().replaceFirst('Bad state: ', '')}',
+      );
+    }
+    try {
+      await _cloudService.clearAccountData(phone: phone, token: token);
+    } catch (error) {
+      throw StateError(
+        '云端数据清理失败：${error.toString().replaceFirst('Bad state: ', '')}',
+      );
+    }
   }
 
   Future<void> addItem(InventoryItem item) async {
@@ -541,13 +799,21 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> updateItem(InventoryItem item) async {
+    final previous = itemById(item.id);
     await _mutate(() {
       final index = _items.indexWhere((entry) => entry.id == item.id);
       if (index >= 0) _items[index] = item;
     });
+    if (previous != null && isAuthenticated && !cloudSyncPending) {
+      final retained = item.imagePaths.toSet();
+      await _deleteRemoteImages(
+        previous.imagePaths.where((path) => !retained.contains(path)),
+      );
+    }
   }
 
   Future<void> deleteItem(String id) async {
+    final previous = itemById(id);
     await _mutate(() {
       _items.removeWhere((item) => item.id == id);
       for (var index = 0; index < _items.length; index++) {
@@ -560,6 +826,24 @@ class AppStore extends ChangeNotifier {
         );
       }
     });
+    if (previous != null && isAuthenticated && !cloudSyncPending) {
+      await _deleteRemoteImages(previous.imagePaths);
+    }
+  }
+
+  Future<void> _deleteRemoteImages(Iterable<String> resources) async {
+    final remote = resources
+        .where(
+          (path) => path.startsWith('https://') || path.startsWith('http://'),
+        )
+        .toList();
+    if (remote.isEmpty || !isAuthenticated) return;
+    try {
+      await _cloudService.deleteRemoteImages(remote, token: sessionToken);
+    } catch (error) {
+      cloudSyncError = error.toString().replaceFirst('Bad state: ', '');
+      notifyListeners();
+    }
   }
 
   Future<void> toggleFavorite(String id) async {
@@ -578,7 +862,10 @@ class AppStore extends ChangeNotifier {
       final sourceIndex = _items.indexWhere((item) => item.id == id);
       if (sourceIndex < 0) return;
       final validIds = targets
-          .where((relatedId) => _items.any((item) => item.id == relatedId))
+          .where(
+            (relatedId) =>
+                _items.any((item) => item.id == relatedId && item.isActive),
+          )
           .toSet();
       for (var index = 0; index < _items.length; index++) {
         final item = _items[index];
@@ -625,6 +912,7 @@ class AppStore extends ChangeNotifier {
     String disposalPlatform = '',
     String disposalContact = '',
     double disposalPrice = 0,
+    double disposalCost = 0,
     String processDate = '',
   }) async {
     await _mutate(() {
@@ -632,6 +920,14 @@ class AppStore extends ChangeNotifier {
       if (index < 0) return;
       final item = _items[index];
       final now = DateTime.now();
+      final normalizedDisposalPrice =
+          disposalMethod == '转卖' || disposalMethod == '回收'
+          ? math.max(0.0, disposalPrice)
+          : 0.0;
+      final normalizedDisposalCost =
+          disposalMethod == '转卖' || disposalMethod == '回收'
+          ? math.max(0.0, disposalCost)
+          : 0.0;
       final note = switch (status) {
         'idle' => idleReason.trim().isEmpty ? '' : '闲置原因：${idleReason.trim()}',
         'repairing' => [
@@ -641,8 +937,10 @@ class AppStore extends ChangeNotifier {
         'processed' => [
           disposalMethod,
           if (disposalPlatform.trim().isNotEmpty) disposalPlatform.trim(),
-          if (disposalPrice > 0)
-            '${item.currencySymbol}${formatMoney(disposalPrice)}',
+          if (normalizedDisposalPrice > 0)
+            '${item.currencySymbol}${formatMoney(normalizedDisposalPrice)}',
+          if (normalizedDisposalCost > 0)
+            '成本 ${item.currencySymbol}${formatMoney(normalizedDisposalCost)}',
         ].join(' · '),
         'retired' => '物品已退役',
         _ => '恢复使用中',
@@ -678,13 +976,67 @@ class AppStore extends ChangeNotifier {
             ? disposalContact
             : item.disposalContact,
         disposalPrice: status == 'processed'
-            ? disposalPrice
+            ? normalizedDisposalPrice
             : item.disposalPrice,
+        disposalCost: status == 'processed'
+            ? normalizedDisposalCost
+            : item.disposalCost,
         processDate: status == 'processed'
             ? (processDate.trim().isEmpty
                   ? formatDate(now)
                   : formatDate(parseDate(processDate) ?? now))
             : item.processDate,
+        recoveryMethod: status == 'processed' ? '' : item.recoveryMethod,
+        recoveryTargetPrice: status == 'processed'
+            ? 0
+            : item.recoveryTargetPrice,
+        recoveryDeadline: status == 'processed' ? '' : item.recoveryDeadline,
+        recoveryPlatform: status == 'processed' ? '' : item.recoveryPlatform,
+        recoveryContact: status == 'processed' ? '' : item.recoveryContact,
+        recoveryNote: status == 'processed' ? '' : item.recoveryNote,
+      );
+    });
+  }
+
+  Future<void> planRecovery(
+    String id, {
+    required String method,
+    required double targetPrice,
+    required String deadline,
+    String platform = '',
+    String contact = '',
+    String note = '',
+  }) async {
+    await _mutate(() {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index < 0) throw StateError('未找到这件物品');
+      final item = _items[index];
+      if (item.status != 'idle') {
+        throw StateError('只有闲置物品可以制定回血计划');
+      }
+      final cashMethod = method == '转卖' || method == '回收';
+      _items[index] = item.copyWith(
+        recoveryMethod: method,
+        recoveryTargetPrice: cashMethod ? math.max(0.0, targetPrice) : 0,
+        recoveryDeadline: deadline.trim(),
+        recoveryPlatform: cashMethod ? platform.trim() : '',
+        recoveryContact: method == '转赠' ? contact.trim() : '',
+        recoveryNote: note.trim(),
+      );
+    });
+  }
+
+  Future<void> cancelRecoveryPlan(String id) async {
+    await _mutate(() {
+      final index = _items.indexWhere((item) => item.id == id);
+      if (index < 0) return;
+      _items[index] = _items[index].copyWith(
+        recoveryMethod: '',
+        recoveryTargetPrice: 0,
+        recoveryDeadline: '',
+        recoveryPlatform: '',
+        recoveryContact: '',
+        recoveryNote: '',
       );
     });
   }
@@ -809,9 +1161,11 @@ class _AppSnapshot {
     required this.accountAvatarPath,
     required this.accountBirthday,
     required this.accountGender,
-    required this.sessionToken,
+    this.sessionToken = '',
     required this.guestStartedAt,
     required this.guestAddCount,
+    required this.cloudSyncPending,
+    required this.cloudSyncError,
     required this.lastCloudSyncedAt,
   });
 
@@ -829,5 +1183,7 @@ class _AppSnapshot {
   final String sessionToken;
   final DateTime? guestStartedAt;
   final int guestAddCount;
+  final bool cloudSyncPending;
+  final String? cloudSyncError;
   final DateTime? lastCloudSyncedAt;
 }

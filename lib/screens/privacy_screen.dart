@@ -77,6 +77,7 @@ class _PrivacyScreenState extends State<PrivacyScreen>
   @override
   Widget build(BuildContext context) {
     final document = _documents[_tabController.index];
+    final primary = Theme.of(context).colorScheme.primary;
     return PageFrame(
       title: '隐私与协议',
       child: Column(
@@ -94,10 +95,10 @@ class _PrivacyScreenState extends State<PrivacyScreen>
               dividerHeight: 0,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
-                color: const Color(0xFFE7F6F1),
+                color: Color.lerp(primary, Colors.white, 0.88),
                 borderRadius: BorderRadius.circular(12),
               ),
-              labelColor: const Color(0xFF2E7568),
+              labelColor: primary,
               unselectedLabelColor: appMuted,
               labelStyle: const TextStyle(
                 fontSize: 13,
@@ -174,7 +175,11 @@ class _AgreementDocument extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 38),
             child: Column(
               children: [
-                Icon(icon, color: appPink, size: 30),
+                Icon(
+                  icon,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 30,
+                ),
                 const SizedBox(height: 14),
                 const Text(
                   '协议内容加载失败',
