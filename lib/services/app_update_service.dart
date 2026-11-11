@@ -8,6 +8,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models.dart';
+import '../components/app_brand_icon.dart';
 import '../widgets.dart';
 import 'api/api_client.dart';
 import 'api/api_settings.dart';
@@ -70,60 +72,27 @@ class AppUpdateService {
       await showDialog<void>(
         context: context,
         barrierDismissible: canDismiss,
+        barrierColor: const Color(0x990D1512),
         builder: (dialogContext) => PopScope(
           canPop: canDismiss,
-          child: AlertDialog(
-            title: const Text('发现新版本'),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            content: SizedBox(
-              width: 340,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _UpdateBadge(
-                    currentVersion: package.version,
-                    latestVersion: info.version,
-                    force: info.force,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    info.notes.isEmpty ? '包含体验优化和问题修复。' : info.notes,
-                    style: const TextStyle(
-                      color: Color(0xFF66635D),
-                      fontSize: 12,
-                      height: 1.7,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              if (canDismiss)
-                TextButton(
-                  onPressed: () async {
-                    if (invalidForceConfig) {
-                      if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      return;
+          child: _AppUpdateDialog(
+            currentVersion: package.version,
+            info: info,
+            onLater: canDismiss
+                ? () async {
+                    if (!invalidForceConfig) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString(
+                        _skipKey,
+                        '${info.version}|${DateTime.now().toIso8601String()}',
+                      );
                     }
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString(
-                      _skipKey,
-                      '${info.version}|${DateTime.now().toIso8601String()}',
-                    );
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  },
-                  child: Text(invalidForceConfig ? '关闭' : '稍后'),
-                ),
-              FilledButton(
-                onPressed: info.downloadUrl.isEmpty
-                    ? null
-                    : () => _openDownload(context, info.downloadUrl),
-                child: Text(info.downloadUrl.isEmpty ? '下载地址未配置' : '立即更新'),
-              ),
-            ],
+                  }
+                : null,
+            onUpdate: info.downloadUrl.isEmpty
+                ? null
+                : () => _openDownload(context, info.downloadUrl),
           ),
         ),
       );
@@ -284,59 +253,243 @@ class AppUpdateService {
   }
 }
 
-class _UpdateBadge extends StatelessWidget {
-  const _UpdateBadge({
+class _AppUpdateDialog extends StatelessWidget {
+  const _AppUpdateDialog({
+    required this.currentVersion,
+    required this.info,
+    required this.onLater,
+    required this.onUpdate,
+  });
+
+  final String currentVersion;
+  final AppUpdateInfo info;
+  final VoidCallback? onLater;
+  final VoidCallback? onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
+    final downloadConfigured = info.downloadUrl.isNotEmpty;
+    final notes = info.notes.isEmpty ? '包含体验优化和问题修复。' : info.notes;
+    return Dialog(
+      key: const Key('app-update-dialog'),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 390,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 36,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+                  child: Column(
+                    children: [
+                      AppBrandIcon(
+                        size: 68,
+                        radius: 20,
+                        imageKey: const Key('app-update-icon'),
+                        backgroundColor: scheme.surfaceContainerLowest,
+                        shadowColor: primary.withValues(alpha: 0.14),
+                        shadowBlur: 22,
+                        shadowOffset: const Offset(0, 8),
+                      ),
+                      const SizedBox(height: 22),
+                      _VersionRoute(
+                        currentVersion: currentVersion,
+                        latestVersion: info.version,
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        notes,
+                        style: TextStyle(
+                          color: context.appTextColor.withValues(alpha: 0.82),
+                          fontSize: 12,
+                          height: 1.65,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      if (!downloadConfigured)
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: onLater,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: const Text('关闭'),
+                          ),
+                        )
+                      else if (onLater != null)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: onLater,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: context.appMutedColor,
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: const Text('稍后'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: onUpdate,
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: const Text('立即更新'),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: onUpdate,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: const Text('立即更新'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VersionRoute extends StatelessWidget {
+  const _VersionRoute({
     required this.currentVersion,
     required this.latestVersion,
-    required this.force,
   });
 
   final String currentVersion;
   final String latestVersion;
-  final bool force;
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Color.lerp(primary, Colors.white, 0.92),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            force
-                ? Icons.system_update_alt_rounded
-                : Icons.new_releases_outlined,
-            color: primary,
-            size: 24,
+    return Row(
+      children: [
+        _VersionChip(label: '当前版本', value: currentVersion, muted: true),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Icon(
+            Icons.arrow_forward_rounded,
+            color: context.appMutedColor.withValues(alpha: 0.65),
+            size: 17,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '当前 $currentVersion  →  最新 $latestVersion',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
+        ),
+        _VersionChip(label: '最新版本', value: latestVersion, color: primary),
+      ],
+    );
+  }
+}
+
+class _VersionChip extends StatelessWidget {
+  const _VersionChip({
+    required this.label,
+    required this.value,
+    this.color,
+    this.muted = false,
+  });
+
+  final String label;
+  final String value;
+  final Color? color;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = color ?? context.appMutedColor;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: muted
+              ? context.appSurfaceMutedColor
+              : Color.lerp(color, scheme.surfaceContainerLowest, 0.88),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: muted
+                ? context.appBorderColor
+                : color!.withValues(alpha: 0.16),
           ),
-          if (force)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFE7EA),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                '强制更新',
-                style: TextStyle(
-                  color: Color(0xFFC04F68),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: context.appMutedColor,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
               ),
             ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

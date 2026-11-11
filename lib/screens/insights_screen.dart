@@ -29,73 +29,75 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = AppStore.instance;
-    final items = store.items;
-    if (store.isGuest && items.isEmpty) {
-      return _GuestInsightsPreview(
-        remainingAdds: store.guestAddsRemaining,
-        expiresSoon: store.guestExpiryWarning,
-        onAdd: () => MainShell.of(context).openAddItem(),
-        onLogin: () => _openLogin(context),
-      );
-    }
-    final revision = store.dataRevision;
-    if (_snapshot == null ||
-        _snapshotRevision != revision ||
-        _snapshotPeriod != _period) {
-      _snapshot = InsightsSnapshot.build(items, period: _period);
-      _snapshotRevision = revision;
-      _snapshotPeriod = _period;
-    }
-    final snapshot = _snapshot!;
-    return AppBackdrop(
-      child: SafeArea(
-        bottom: false,
-        child: ContentPane(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 116),
-            children: [
-              _InsightsHeader(
-                period: _period,
-                onPeriodChanged: (period) => setState(() => _period = period),
+    return AnimatedBuilder(
+      animation: AppStore.instance,
+      builder: (context, _) {
+        final store = AppStore.instance;
+        final items = store.items;
+        if (store.isGuest && items.isEmpty) {
+          return _GuestInsightsPreview(
+            remainingAdds: store.guestAddsRemaining,
+            expiresSoon: store.guestExpiryWarning,
+            onAdd: () => MainShell.of(context).openAddItem(),
+            onLogin: () => _openLogin(context),
+          );
+        }
+        final revision = store.dataRevision;
+        if (_snapshot == null ||
+            _snapshotRevision != revision ||
+            _snapshotPeriod != _period) {
+          _snapshot = InsightsSnapshot.build(items, period: _period);
+          _snapshotRevision = revision;
+          _snapshotPeriod = _period;
+        }
+        final snapshot = _snapshot!;
+        return AppBackdrop(
+          child: SafeArea(
+            bottom: false,
+            child: ContentPane(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 116),
+                children: [
+                  _InsightsHeader(
+                    period: _period,
+                    onPeriodChanged: (period) =>
+                        setState(() => _period = period),
+                  ),
+                  if (store.isGuest) ...[
+                    const SizedBox(height: 14),
+                    GuestPageBanner(
+                      subtitle: store.guestExpiryWarning
+                          ? '本地数据即将到期 · 洞察基于本机记录'
+                          : '洞察基于本机 ${items.length} 件物品',
+                      remainingAdds: store.guestAddsRemaining,
+                      onLogin: () => _openLogin(context),
+                    ),
+                  ],
+                  const SizedBox(height: 17),
+                  InsightsRecentSceneCard(snapshot: snapshot),
+                  const SectionHeading(title: '值得重新看看'),
+                  if (snapshot.alerts.isEmpty)
+                    const _AllClearCard()
+                  else
+                    _AlertGroup(
+                      alerts: snapshot.alerts.take(3).toList(),
+                      onTap: (alert) => _handleAlert(context, alert),
+                    ),
+                  if (snapshot.hasEnoughData) ...[
+                    const SectionHeading(title: '物品进入生活的节奏'),
+                    _PurchaseRhythmCard(snapshot: snapshot),
+                    const SectionHeading(title: '再往里看一层'),
+                    InsightsDetailsSection(snapshot: snapshot),
+                  ] else ...[
+                    const SectionHeading(title: '再多记录一点'),
+                    _EarlyDataGuide(itemCount: snapshot.totalCount),
+                  ],
+                ],
               ),
-              if (store.isGuest) ...[
-                const SizedBox(height: 14),
-                GuestPageBanner(
-                  subtitle: store.guestExpiryWarning
-                      ? '本地数据即将到期 · 洞察基于本机记录'
-                      : '洞察基于本机 ${items.length} 件物品',
-                  remainingAdds: store.guestAddsRemaining,
-                  onLogin: () => _openLogin(context),
-                ),
-              ],
-              const SizedBox(height: 17),
-              _InsightOverviewCard(snapshot: snapshot),
-              const SectionHeading(title: '值得重新看看'),
-              if (snapshot.alerts.isEmpty)
-                const _AllClearCard()
-              else
-                _AlertGroup(
-                  alerts: snapshot.alerts.take(3).toList(),
-                  onTap: (alert) => _handleAlert(context, alert),
-                ),
-              if (snapshot.usedCount > 0) ...[
-                const SectionHeading(title: '它们的日常价值'),
-                _CostValueCard(snapshot: snapshot),
-              ],
-              if (snapshot.hasEnoughData) ...[
-                const SectionHeading(title: '物品进入生活的节奏'),
-                _PurchaseRhythmCard(snapshot: snapshot),
-                const SectionHeading(title: '再往里看一层'),
-                _DetailedInsights(snapshot: snapshot),
-              ] else ...[
-                const SectionHeading(title: '再多记录一点'),
-                _EarlyDataGuide(itemCount: snapshot.totalCount),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -163,28 +165,7 @@ class _InsightsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '匣中光景',
-          style: TextStyle(
-            fontFamily: 'Songti SC',
-            fontSize: 28,
-            height: 1.15,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 5),
-        const Text(
-          '看见这一匣里的物品如何参与生活',
-          style: TextStyle(color: appMuted, fontSize: 10),
-        ),
-        const SizedBox(height: 14),
-        _PeriodSwitcher(value: period, onChanged: onPeriodChanged),
-      ],
-    );
+    return _PeriodSwitcher(value: period, onChanged: onPeriodChanged);
   }
 }
 
@@ -201,9 +182,9 @@ class _PeriodSwitcher extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
+        color: context.appSurfaceColor.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: context.appBorderColor),
       ),
       child: Row(
         children: [
@@ -224,7 +205,7 @@ class _PeriodSwitcher extends StatelessWidget {
                     period.label,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: period == value ? primary : appMuted,
+                      color: period == value ? primary : context.appMutedColor,
                       fontSize: 10,
                       fontWeight: period == value
                           ? FontWeight.w800
@@ -240,8 +221,8 @@ class _PeriodSwitcher extends StatelessWidget {
   }
 }
 
-class _InsightOverviewCard extends StatelessWidget {
-  const _InsightOverviewCard({required this.snapshot});
+class InsightsRecentSceneCard extends StatelessWidget {
+  const InsightsRecentSceneCard({super.key, required this.snapshot});
 
   final InsightsSnapshot snapshot;
 
@@ -249,88 +230,113 @@ class _InsightOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GradientCard(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final ringSize = constraints.maxWidth < 280 ? 76.0 : 92.0;
+          return Column(
+            key: const Key('insights-recent-scene'),
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '这一匣的最近光景',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
+              Row(
+                children: [
+                  Text(
+                    '这一匣的最近光景',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    snapshot.period.label,
+                    style: TextStyle(color: Colors.white60, fontSize: 9),
+                  ),
+                ],
               ),
-              const Spacer(),
-              Text(
-                snapshot.period.label,
-                style: const TextStyle(color: Colors.white60, fontSize: 9),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Songti SC',
+                            fontSize: constraints.maxWidth < 280 ? 23 : 25,
+                            height: 1.22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _message,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            height: 1.55,
+                          ),
+                        ),
+                        if (snapshot.foreignCurrencyItemCount > 0) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            '金额分析仅合计人民币，另有 '
+                            '${snapshot.foreignCurrencyItemCount} 件外币物品',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 9,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: constraints.maxWidth < 280 ? 10 : 14),
+                  _UsageRateRing(rate: snapshot.usageRate, size: ringSize),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SceneMetric(
+                      value: '${snapshot.inUseCount} 件',
+                      label: '正在使用',
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: _SceneMetric(
+                      value: '${snapshot.periodUsageDays} 天',
+                      label: '本期使用',
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: _SceneMetric(
+                      value:
+                          '¥${formatMoney(snapshot.idleValue, compact: true)}',
+                      label: '闲置占用',
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: 'Songti SC',
-              fontSize: 25,
-              height: 1.2,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            _message,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              height: 1.55,
-            ),
-          ),
-          if (snapshot.foreignCurrencyItemCount > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              '金额分析仅合计人民币，另有 '
-              '${snapshot.foreignCurrencyItemCount} 件外币物品',
-              style: const TextStyle(color: Colors.white60, fontSize: 9),
-            ),
-          ],
-          if (snapshot.activeCount > 0) ...[
-            const SizedBox(height: 16),
-            _StatusOverview(snapshot: snapshot),
-          ],
-          const SizedBox(height: 17),
-          Container(height: 1, color: Colors.white24),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: MiniMetric(
-                  label: '使用率',
-                  value: '${(snapshot.usageRate * 100).round()}%',
-                  dark: true,
-                ),
-              ),
-              Expanded(
-                child: MiniMetric(
-                  label: '本期使用',
-                  value: '${snapshot.periodUsageDays} 天',
-                  dark: true,
-                ),
-              ),
-              Expanded(
-                child: MiniMetric(
-                  label: '闲置占用',
-                  value: '¥${formatMoney(snapshot.idleValue, compact: true)}',
-                  dark: true,
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -349,68 +355,129 @@ class _InsightOverviewCard extends StatelessWidget {
     if (snapshot.usedCount == 0) {
       return '${snapshot.activeCount} 件生活物品在本期还没有使用记录，可以从一件开始。';
     }
-    return '${snapshot.activeCount} 件生活物品中，${snapshot.usedCount} 件在本期被使用。';
+    return '${snapshot.activeCount} 件生活物品中，'
+        '${snapshot.usedCount} 件在本期被使用，让收藏继续参与日常。';
   }
 }
 
-class _StatusOverview extends StatelessWidget {
-  const _StatusOverview({required this.snapshot});
+class _UsageRateRing extends StatelessWidget {
+  const _UsageRateRing({required this.rate, required this.size});
 
-  final InsightsSnapshot snapshot;
+  final double rate;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final entries = [
-      (label: '使用中', count: snapshot.inUseCount, status: itemStatuses[0]),
-      (label: '闲置', count: snapshot.idleCount, status: itemStatuses[1]),
-      (label: '维修中', count: snapshot.repairingCount, status: itemStatuses[2]),
-    ].where((entry) => entry.count > 0).toList();
-    if (entries.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            height: 8,
-            child: Row(
+    final accent = AppThemeTokens.of(context).heroAccent;
+    final normalized = rate.clamp(0, 1).toDouble();
+    return Semantics(
+      label: '使用率 ${(normalized * 100).round()}%',
+      child: SizedBox.square(
+        key: const Key('insights-usage-ring'),
+        dimension: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _UsageRateRingPainter(rate: normalized, color: accent),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                for (final entry in entries)
-                  Expanded(
-                    flex: entry.count,
-                    child: ColoredBox(color: entry.status.color),
+                Text(
+                  '${(normalized * 100).round()}%',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Songti SC',
+                    fontSize: size < 84 ? 19 : 22,
+                    fontWeight: FontWeight.w700,
                   ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '使用率',
+                  style: TextStyle(color: Colors.white70, fontSize: 9),
+                ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 13,
-          runSpacing: 5,
-          children: [
-            for (final entry in entries)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: entry.status.color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${entry.label} ${entry.count}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 9),
-                  ),
-                ],
-              ),
           ],
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _UsageRateRingPainter extends CustomPainter {
+  const _UsageRateRingPainter({required this.rate, required this.color});
+
+  final double rate;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const strokeWidth = 7.0;
+    final rect = Rect.fromCircle(
+      center: size.center(Offset.zero),
+      radius: size.shortestSide / 2 - strokeWidth / 2,
+    );
+    final track = Paint()
+      ..color = Colors.white.withValues(alpha: 0.16)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawCircle(rect.center, rect.width / 2, track);
+
+    final progress = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * rate, false, progress);
+  }
+
+  @override
+  bool shouldRepaint(covariant _UsageRateRingPainter oldDelegate) {
+    return oldDelegate.rate != rate || oldDelegate.color != color;
+  }
+}
+
+class _SceneMetric extends StatelessWidget {
+  const _SceneMetric({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.white70, fontSize: 9),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -429,8 +496,7 @@ class _AlertGroup extends StatelessWidget {
         children: [
           for (var index = 0; index < alerts.length; index++) ...[
             _AlertRow(alert: alerts[index], onTap: () => onTap(alerts[index])),
-            if (index < alerts.length - 1)
-              const Divider(height: 1, indent: 66, color: Color(0xFFF1EDE7)),
+            if (index < alerts.length - 1) const ContentDivider(indent: 66),
           ],
         ],
       ),
@@ -484,20 +550,10 @@ class _AlertRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      alert.label,
-                      style: TextStyle(
-                        color: primary,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
                       alert.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -507,8 +563,8 @@ class _AlertRow extends StatelessWidget {
                       alert.message,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: appMuted,
+                      style: TextStyle(
+                        color: context.appMutedColor,
                         fontSize: 10,
                         height: 1.4,
                       ),
@@ -517,7 +573,7 @@ class _AlertRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 7),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 color: Color(0xFFB9B4AC),
                 size: 19,
@@ -549,7 +605,7 @@ class _AllClearCard extends StatelessWidget {
             child: Icon(Icons.check_rounded, color: primary, size: 21),
           ),
           const SizedBox(width: 13),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -560,104 +616,10 @@ class _AllClearCard extends StatelessWidget {
                 SizedBox(height: 3),
                 Text(
                   '继续记录使用，更准确的趋势会慢慢出现。',
-                  style: TextStyle(color: appMuted, fontSize: 10),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 10),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CostValueCard extends StatelessWidget {
-  const _CostValueCard({required this.snapshot});
-
-  final InsightsSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final hasTarget = snapshot.targetDailyCost > 0;
-    final comparison = hasTarget && snapshot.actualDailyCost > 0
-        ? (snapshot.actualDailyCost - snapshot.targetDailyCost) /
-              snapshot.targetDailyCost
-        : null;
-    return SoftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '使用日均',
-                      style: TextStyle(color: appMuted, fontSize: 10),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '¥${formatMoney(snapshot.actualDailyCost)}',
-                      style: TextStyle(
-                        color: primary,
-                        fontFamily: 'Songti SC',
-                        fontSize: 25,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (hasTarget)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: primary.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    comparison == null
-                        ? '目标 ¥${formatMoney(snapshot.targetDailyCost)} / 天'
-                        : comparison <= 0
-                        ? '比目标低 ${(comparison.abs() * 100).round()}%'
-                        : '比目标高 ${(comparison * 100).round()}%',
-                    style: TextStyle(
-                      color: primary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(5),
-            child: LinearProgressIndicator(
-              value: hasTarget
-                  ? math.min(
-                      1,
-                      snapshot.actualDailyCost / snapshot.targetDailyCost,
-                    )
-                  : 0.55,
-              minHeight: 7,
-              backgroundColor: const Color(0xFFF0ECE6),
-              color: primary,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            hasTarget
-                ? '目标为 ¥${formatMoney(snapshot.targetDailyCost)} / 天，越低的实际日均代表越充分地使用。'
-                : '补上目标使用天数后，就能看到实际成本与目标之间的差距。',
-            style: const TextStyle(color: appMuted, fontSize: 10, height: 1.45),
           ),
         ],
       ),
@@ -697,23 +659,13 @@ class _PurchaseRhythmCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '本期购入',
-                      style: TextStyle(color: appMuted, fontSize: 10),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '¥${formatMoney(snapshot.periodPurchaseAmount, compact: true)}',
-                      style: const TextStyle(
-                        fontFamily: 'Songti SC',
-                        fontSize: 23,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  '¥${formatMoney(snapshot.periodPurchaseAmount, compact: true)}',
+                  style: TextStyle(
+                    fontFamily: 'Songti SC',
+                    fontSize: 23,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               Text(
@@ -729,7 +681,7 @@ class _PurchaseRhythmCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             comparison,
-            style: const TextStyle(color: appMuted, fontSize: 10),
+            style: TextStyle(color: context.appMutedColor, fontSize: 10),
           ),
           const SizedBox(height: 17),
           SizedBox(
@@ -746,7 +698,10 @@ class _PurchaseRhythmCard extends StatelessWidget {
                           entry.value == 0
                               ? ''
                               : '¥${formatMoney(entry.value, compact: true)}',
-                          style: const TextStyle(color: appMuted, fontSize: 8),
+                          style: TextStyle(
+                            color: context.appMutedColor,
+                            fontSize: 8,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         AnimatedContainer(
@@ -770,7 +725,10 @@ class _PurchaseRhythmCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           entry.label,
-                          style: const TextStyle(color: appMuted, fontSize: 9),
+                          style: TextStyle(
+                            color: context.appMutedColor,
+                            fontSize: 9,
+                          ),
                         ),
                       ],
                     ),
@@ -784,8 +742,8 @@ class _PurchaseRhythmCard extends StatelessWidget {
   }
 }
 
-class _DetailedInsights extends StatelessWidget {
-  const _DetailedInsights({required this.snapshot});
+class InsightsDetailsSection extends StatelessWidget {
+  const InsightsDetailsSection({super.key, required this.snapshot});
 
   final InsightsSnapshot snapshot;
 
@@ -793,68 +751,27 @@ class _DetailedInsights extends StatelessWidget {
   Widget build(BuildContext context) {
     final holdingLabels = ['少于 1 个月', '1~6 个月', '6 个月~1 年', '1~3 年', '3 年以上'];
     return SoftCard(
-      padding: EdgeInsets.zero,
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        iconColor: Theme.of(context).colorScheme.primary,
-        collapsedIconColor: appMuted,
-        title: const Text(
-          '资产分布与持有结构',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-        ),
-        subtitle: const Text(
-          '展开查看分类、持有时间和分类日均成本',
-          style: TextStyle(color: appMuted, fontSize: 9),
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _DetailTitle(title: '资产分布'),
+          const _DetailTitle(title: '资产分布'),
           if (snapshot.categories.isEmpty)
             const _NoData()
-          else ...[
-            _DistributionBar(categories: snapshot.categories),
-            const SizedBox(height: 14),
-            for (final entry in snapshot.categories.take(5)) ...[
-              _CategoryRow(entry: entry),
-              const SizedBox(height: 10),
-            ],
-          ],
-          const SizedBox(height: 8),
-          _DetailTitle(title: '持有时间'),
+          else
+            _AssetDistributionPie(categories: snapshot.categories),
+          const SizedBox(height: 20),
+          const _DetailTitle(title: '持有时间'),
           if (snapshot.totalCount == 0)
             const _NoData()
           else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var index = 0; index < holdingLabels.length; index++)
-                  if (snapshot.holdingCounts[index] > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppThemeTokens.of(context).softPrimary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${holdingLabels[index]} · '
-                        '${snapshot.holdingCounts[index]} 件',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-              ],
+            _HoldingTimeChart(
+              labels: holdingLabels,
+              counts: snapshot.holdingCounts,
             ),
           if (snapshot.categories.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _DetailTitle(title: '分类拥有日均'),
+            const _DetailTitle(title: '分类拥有日均'),
             for (final entry in ([
               ...snapshot.categories,
             ]..sort((a, b) => b.dailyCost.compareTo(a.dailyCost))).take(5)) ...[
@@ -881,7 +798,7 @@ class _DetailTitle extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -893,33 +810,132 @@ class _NoData extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Center(
-        child: Text('暂无数据', style: TextStyle(color: appMuted, fontSize: 11)),
+        child: Text(
+          '暂无数据',
+          style: TextStyle(color: context.appMutedColor, fontSize: 11),
+        ),
       ),
     );
   }
 }
 
-class _DistributionBar extends StatelessWidget {
-  const _DistributionBar({required this.categories});
+class _AssetDistributionPie extends StatelessWidget {
+  const _AssetDistributionPie({required this.categories});
 
   final List<InsightCategoryMetric> categories;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        height: 12,
-        child: Row(
+    const visibleCount = 4;
+    final visible = categories.take(visibleCount).toList();
+    final remaining = categories.skip(visibleCount).toList();
+    final total = categories.fold<double>(0, (sum, entry) => sum + entry.value);
+    final slices = <_AssetSlice>[
+      for (final entry in visible)
+        _AssetSlice(
+          label: entry.category.name,
+          color: entry.category.color,
+          value: entry.value,
+          ratio: total <= 0 ? 0 : entry.value / total,
+        ),
+      if (remaining.isNotEmpty)
+        _AssetSlice(
+          label: '其余 ${remaining.length} 类',
+          color: context.appMutedColor,
+          value: remaining.fold<double>(0, (sum, entry) => sum + entry.value),
+          ratio:
+              (remaining.fold<double>(0, (sum, entry) => sum + entry.value) /
+                      total)
+                  .clamp(0, 1),
+        ),
+    ];
+    final chart = _AssetPieChart(slices: slices);
+    final legend = Column(
+      children: [
+        for (var index = 0; index < slices.length; index++) ...[
+          _AssetLegendRow(slice: slices[index]),
+          if (index != slices.length - 1) const SizedBox(height: 9),
+        ],
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 320) {
+          return Column(children: [chart, const SizedBox(height: 16), legend]);
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            for (final entry in categories)
-              Expanded(
-                flex: math.max(1, (entry.ratio * 1000).round()),
-                child: ColoredBox(color: entry.category.color),
+            chart,
+            const SizedBox(width: 22),
+            Expanded(child: legend),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AssetSlice {
+  const _AssetSlice({
+    required this.label,
+    required this.color,
+    required this.value,
+    required this.ratio,
+  });
+
+  final String label;
+  final Color color;
+  final double value;
+  final double ratio;
+}
+
+class _AssetPieChart extends StatelessWidget {
+  const _AssetPieChart({required this.slices});
+
+  final List<_AssetSlice> slices;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: slices
+          .map((slice) => '${slice.label} ${(slice.ratio * 100).round()}%')
+          .join('，'),
+      child: SizedBox.square(
+        key: const Key('insights-asset-pie'),
+        dimension: 132,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _AssetPiePainter(
+                  slices: slices,
+                  trackColor: context.appSurfaceMutedColor,
+                ),
               ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${slices.length} 类',
+                  style: TextStyle(
+                    fontFamily: 'Songti SC',
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '资产',
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -927,10 +943,56 @@ class _DistributionBar extends StatelessWidget {
   }
 }
 
-class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({required this.entry});
+class _AssetPiePainter extends CustomPainter {
+  const _AssetPiePainter({required this.slices, required this.trackColor});
 
-  final InsightCategoryMetric entry;
+  final List<_AssetSlice> slices;
+  final Color trackColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeWidth = 18.0;
+    final rect = Rect.fromCircle(
+      center: size.center(Offset.zero),
+      radius: size.shortestSide / 2 - strokeWidth / 2,
+    );
+    final track = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawCircle(rect.center, rect.width / 2, track);
+
+    var start = -math.pi / 2;
+    for (final slice in slices) {
+      final sweep = slice.ratio * math.pi * 2;
+      if (sweep <= 0) continue;
+      final gap = math.min(0.025, sweep * 0.18);
+      final paint = Paint()
+        ..color = slice.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.butt;
+      canvas.drawArc(
+        rect,
+        start + gap / 2,
+        math.max(0, sweep - gap),
+        false,
+        paint,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AssetPiePainter oldDelegate) {
+    return oldDelegate.slices != slices || oldDelegate.trackColor != trackColor;
+  }
+}
+
+class _AssetLegendRow extends StatelessWidget {
+  const _AssetLegendRow({required this.slice});
+
+  final _AssetSlice slice;
 
   @override
   Widget build(BuildContext context) {
@@ -939,32 +1001,122 @@ class _CategoryRow extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(
-            color: entry.category.color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: slice.color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 9),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
-            entry.category.name,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            slice.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
           ),
         ),
+        const SizedBox(width: 6),
         Text(
-          '${(entry.ratio * 100).round()}%',
-          style: const TextStyle(color: appMuted, fontSize: 9),
+          '${(slice.ratio * 100).round()}%',
+          style: TextStyle(color: context.appMutedColor, fontSize: 9),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 9),
         SizedBox(
-          width: 70,
+          width: 58,
           child: Text(
-            '¥${formatMoney(entry.value, compact: true)}',
+            '¥${formatMoney(slice.value, compact: true)}',
             textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HoldingTimeChart extends StatelessWidget {
+  const _HoldingTimeChart({required this.labels, required this.counts});
+
+  final List<String> labels;
+  final List<int> counts;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final accent = Theme.of(context).colorScheme.secondary;
+    final maxCount = math.max(
+      1,
+      counts.fold<int>(0, (max, count) => math.max(max, count)),
+    );
+    return Semantics(
+      label: [
+        for (var index = 0; index < labels.length; index++)
+          '${labels[index]} ${counts[index]} 件',
+      ].join('，'),
+      child: SizedBox(
+        key: const Key('insights-holding-chart'),
+        height: 122,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var index = 0; index < labels.length; index++)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Column(
+                    children: [
+                      Text(
+                        '${counts[index]}',
+                        style: TextStyle(
+                          color: counts[index] > 0
+                              ? context.appTextColor
+                              : context.appMutedColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 350),
+                            width: 24,
+                            height: counts[index] == 0
+                                ? 4
+                                : math.max(8, counts[index] / maxCount * 58),
+                            decoration: BoxDecoration(
+                              color: counts[index] == 0
+                                  ? context.appSurfaceMutedColor
+                                  : Color.lerp(
+                                      primary,
+                                      accent,
+                                      index / (labels.length - 1),
+                                    ),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      SizedBox(
+                        height: 26,
+                        child: Text(
+                          labels[index],
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: context.appMutedColor,
+                            fontSize: 8,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -995,12 +1147,12 @@ class _CostRow extends StatelessWidget {
         Expanded(
           child: Text(
             entry.category.name,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ),
         Text(
           '¥${formatMoney(entry.dailyCost)} / 天',
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -1022,12 +1174,16 @@ class _EarlyDataGuide extends StatelessWidget {
         children: [
           Text(
             itemCount == 0 ? '数据会从第一件物品开始' : '当前数据还比较少',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 5),
-          const Text(
+          Text(
             '多记录几件物品后，购买趋势、分类对比和持有结构才会更有参考价值。',
-            style: TextStyle(color: appMuted, fontSize: 10, height: 1.45),
+            style: TextStyle(
+              color: context.appMutedColor,
+              fontSize: 10,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 14),
           Row(
@@ -1088,7 +1244,7 @@ class _GuideStep extends StatelessWidget {
             const SizedBox(height: 5),
             Text(
               label,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -1154,14 +1310,14 @@ class _GuestInsightsPreview extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.insights_rounded,
                             color: Colors.white,
                             size: 23,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           '从第一件物品开始',
                           style: TextStyle(
                             color: Colors.white,
@@ -1171,7 +1327,7 @@ class _GuestInsightsPreview extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 7),
-                        const Text(
+                        Text(
                           '记录后会自动生成使用率、成本对比和可行动的提醒。',
                           style: TextStyle(
                             color: Colors.white70,
@@ -1187,7 +1343,7 @@ class _GuestInsightsPreview extends StatelessWidget {
                             foregroundColor: primary,
                             minimumSize: const Size(0, 42),
                           ),
-                          icon: const Icon(Icons.add_rounded, size: 18),
+                          icon: Icon(Icons.add_rounded, size: 18),
                           label: Text(
                             remainingAdds > 0 ? '添加第一件物品' : '登录后继续添加',
                           ),
@@ -1209,11 +1365,7 @@ class _GuestInsightsPreview extends StatelessWidget {
                       color: primary,
                       background: softPrimary,
                     ),
-                    const Divider(
-                      height: 1,
-                      indent: 64,
-                      color: Color(0xFFF1EDE7),
-                    ),
+                    const ContentDivider(indent: 64),
                     _GuestFeature(
                       icon: Icons.schedule_rounded,
                       title: '成本与期限',
@@ -1221,11 +1373,7 @@ class _GuestInsightsPreview extends StatelessWidget {
                       color: primary,
                       background: softPrimary,
                     ),
-                    const Divider(
-                      height: 1,
-                      indent: 64,
-                      color: Color(0xFFF1EDE7),
-                    ),
+                    const ContentDivider(indent: 64),
                     _GuestFeature(
                       icon: Icons.auto_awesome_rounded,
                       title: '可行动建议',
@@ -1281,15 +1429,12 @@ class _GuestFeature extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   description,
-                  style: const TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
               ],
             ),

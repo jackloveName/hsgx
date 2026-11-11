@@ -29,14 +29,14 @@ class InfoRow extends StatelessWidget {
             width: labelWidth,
             child: Text(
               label,
-              style: const TextStyle(color: appMuted, fontSize: 12),
+              style: TextStyle(color: context.appMutedColor, fontSize: 12),
             ),
           ),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 12, height: 1.55),
+              style: TextStyle(fontSize: 12, height: 1.55),
             ),
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../app_store.dart';
+import '../components/app_brand_icon.dart';
 import '../components/app_menu_tile.dart';
 import '../components/icon_shortcut.dart';
 import '../components/local_data_status_banner.dart';
@@ -37,21 +38,6 @@ class ProfileScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 22, 20, 116),
                 children: [
-                  const Text(
-                    '拾花人',
-                    style: TextStyle(
-                      fontFamily: 'Songti SC',
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    '把值得留下的日子，一物一物拾进匣中',
-                    style: TextStyle(color: appMuted, fontSize: 10),
-                  ),
-                  const SizedBox(height: 16),
                   GradientCard(
                     padding: const EdgeInsets.all(22),
                     child: Stack(
@@ -59,16 +45,12 @@ class ProfileScreen extends StatelessWidget {
                         Positioned(
                           right: -42,
                           bottom: -44,
-                          child: ClipOval(
-                            child: Opacity(
-                              opacity: 0.07,
-                              child: Image.asset(
-                                'static/image/app-icon-192.png',
-                                width: 170,
-                                height: 170,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                          child: AppBrandIcon(
+                            size: 170,
+                            padding: 0,
+                            radius: 85,
+                            backgroundColor: Colors.transparent,
+                            opacity: 0.07,
                           ),
                         ),
                         Column(
@@ -107,7 +89,7 @@ class ProfileScreen extends StatelessWidget {
                                         children: [
                                           Text(
                                             store.displayName,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 20,
                                               fontWeight: FontWeight.w800,
@@ -118,7 +100,7 @@ class ProfileScreen extends StatelessWidget {
                                       const SizedBox(height: 4),
                                       Text(
                                         '已拾入 ${store.items.length} 件物',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Colors.white70,
                                           fontSize: 11,
                                         ),
@@ -133,7 +115,7 @@ class ProfileScreen extends StatelessWidget {
                               Text(
                                 '金额统计仅合计人民币，另有 '
                                 '${store.foreignCurrencyItemCount} 件外币物品',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 9,
                                 ),
@@ -196,7 +178,7 @@ class ProfileScreen extends StatelessWidget {
                                         ),
                                         borderRadius: BorderRadius.circular(11),
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.cloud_off_rounded,
                                         color: Colors.white,
                                         size: 17,
@@ -208,7 +190,7 @@ class ProfileScreen extends StatelessWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
+                                          Text(
                                             '游客记录保存在本机',
                                             style: TextStyle(
                                               color: Colors.white,
@@ -223,7 +205,7 @@ class ProfileScreen extends StatelessWidget {
                                                       '${store.guestAddsRemaining} 次'
                                                 : '还可添加 '
                                                       '${store.guestAddsRemaining} 次',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: Colors.white70,
                                               fontSize: 9,
                                             ),
@@ -246,12 +228,12 @@ class ProfileScreen extends StatelessWidget {
                                             11,
                                           ),
                                         ),
-                                        textStyle: const TextStyle(
+                                        textStyle: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                      child: const Text('登录继续'),
+                                      child: Text('登录继续'),
                                     ),
                                   ],
                                 ),
@@ -319,7 +301,7 @@ class ProfileScreen extends StatelessWidget {
                             onTap: () =>
                                 _push(context, const ProfileEditScreen()),
                           ),
-                          const Divider(height: 1, color: Color(0xFFF1EDE7)),
+                          const ContentDivider(),
                           AppMenuTile(
                             title: '账号与安全',
                             icon: Icons.security_rounded,
@@ -350,7 +332,7 @@ class ProfileScreen extends StatelessWidget {
                               : appSkinAt(store.skinIndex).name,
                           onTap: () => _push(context, const SkinScreen()),
                         ),
-                        const Divider(height: 1, color: Color(0xFFF1EDE7)),
+                        const ContentDivider(),
                         AppMenuTile(
                           title: '隐私与协议',
                           icon: Icons.lock_outline_rounded,
@@ -410,7 +392,7 @@ class _ProfileAvatar extends StatelessWidget {
       child: Center(
         child: Text(
           fallback,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontSize: 25,
             fontWeight: FontWeight.w800,
@@ -439,16 +421,13 @@ class _ProfileValue extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 9),
-          ),
+          Text(label, style: TextStyle(color: Colors.white70, fontSize: 9)),
           const SizedBox(height: 5),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w800,

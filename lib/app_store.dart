@@ -29,7 +29,7 @@ class AppStore extends ChangeNotifier {
   static final AppStore instance = AppStore();
   static const _storageKey = 'hsgx_flutter_state_v1';
   static const _backupKey = '${_storageKey}_backup';
-  static const _schemaVersion = 7;
+  static const _schemaVersion = 11;
   static const guestRetention = Duration(days: 3);
   static const guestAddLimit = 3;
 
@@ -51,6 +51,7 @@ class AppStore extends ChangeNotifier {
     '卫生间',
     '其他',
   ];
+  final Map<String, String> _storageLocationIcons = {};
 
   bool isReady = false;
   int skinIndex = 0;
@@ -80,6 +81,10 @@ class AppStore extends ChangeNotifier {
   List<InventoryItem> get items => List.unmodifiable(_items);
   List<WishEntry> get wishlist => List.unmodifiable(_wishlist);
   List<String> get storageLocations => List.unmodifiable(_storageLocations);
+  Map<String, String> get storageLocationIcons =>
+      Map.unmodifiable(_storageLocationIcons);
+  String storageLocationIconKey(String name) =>
+      _storageLocationIcons[name] ?? '';
   List<InventoryItem> get activeItems =>
       _items.where((item) => item.isActive).toList();
   ValueListenable<int> get skinListenable => _skinNotifier;
@@ -96,12 +101,26 @@ class AppStore extends ChangeNotifier {
         items: [],
         wishlist: [],
         storageLocations: [],
+        storageLocationIcons: {},
       );
     }
     return GuestCloudData(
       items: List<InventoryItem>.from(_items),
       wishlist: List<WishEntry>.from(_wishlist),
       storageLocations: List<String>.from(_storageLocations),
+      storageLocationIcons: Map<String, String>.from(_storageLocationIcons),
+    );
+  }
+
+  GuestCloudData dataForAccountLogin(String phone) {
+    if (!_accountCacheLocked || phone.trim() != accountPhone.trim()) {
+      return guestCloudData;
+    }
+    return GuestCloudData(
+      items: List<InventoryItem>.from(_items),
+      wishlist: List<WishEntry>.from(_wishlist),
+      storageLocations: List<String>.from(_storageLocations),
+      storageLocationIcons: Map<String, String>.from(_storageLocationIcons),
     );
   }
 
@@ -301,8 +320,17 @@ class AppStore extends ChangeNotifier {
         lastSavedAt = DateTime.now();
       }
     }
+    final shouldResumePendingSync =
+        cloudSyncPending &&
+        isAuthenticated &&
+        !_accountCacheLocked &&
+        !_corruptedDataBlocked &&
+        !restoredFromBackup;
     isReady = true;
     notifyListeners();
+    if (shouldResumePendingSync) {
+      unawaited(_scheduleCloudSync());
+    }
   }
 
   _AppSnapshot _decodeSnapshot(String raw) {
@@ -337,6 +365,17 @@ class AppStore extends ChangeNotifier {
               .toSet()
               .toList()
         : const <String>[];
+    final rawIcons = map['storageLocationIcons'];
+    final locationIcons = <String, String>{};
+    if (rawIcons is Map) {
+      for (final entry in rawIcons.entries) {
+        final name = entry.key.toString();
+        final iconKey = entry.value.toString().trim();
+        if (locations.contains(name) && iconKey.isNotEmpty) {
+          locationIcons[name] = iconKey;
+        }
+      }
+    }
 
     final items = itemMaps.map(InventoryItem.fromJson).toList();
     final authMode = map['authMode']?.toString() == 'account'
@@ -352,7 +391,10 @@ class AppStore extends ChangeNotifier {
       items: items,
       wishlist: wishMaps.map(WishEntry.fromJson).toList(),
       storageLocations: locations,
-      skinIndex: (map['skinIndex'] as num?)?.toInt() ?? 0,
+      storageLocationIcons: locationIcons,
+      skinIndex: version < 11
+          ? _migrateLegacySkinIndex((map['skinIndex'] as num?)?.toInt() ?? 0)
+          : _normalizedSkinIndex((map['skinIndex'] as num?)?.toInt() ?? 0),
       authMode: authMode,
       accountPhone: map['accountPhone']?.toString() ?? '',
       accountName: map['accountName']?.toString() ?? '拾花人',
@@ -386,6 +428,15 @@ class AppStore extends ChangeNotifier {
             ? const ['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']
             : snapshot.storageLocations,
       );
+    _storageLocationIcons
+      ..clear()
+      ..addAll(
+        Map.fromEntries(
+          snapshot.storageLocationIcons.entries.where(
+            (entry) => _storageLocations.contains(entry.key),
+          ),
+        ),
+      );
     skinIndex = snapshot.skinIndex;
     authMode = snapshot.authMode;
     accountPhone = snapshot.accountPhone;
@@ -409,6 +460,7 @@ class AppStore extends ChangeNotifier {
           items: List<InventoryItem>.from(_items),
           wishlist: List<WishEntry>.from(_wishlist),
           storageLocations: List<String>.from(_storageLocations),
+          storageLocationIcons: Map<String, String>.from(_storageLocationIcons),
           skinIndex: skinIndex,
           authMode: authMode,
           accountPhone: accountPhone,
@@ -427,6 +479,7 @@ class AppStore extends ChangeNotifier {
       'items': snapshot.items.map((item) => item.toJson()).toList(),
       'wishlist': snapshot.wishlist.map((entry) => entry.toJson()).toList(),
       'storageLocations': snapshot.storageLocations,
+      'storageLocationIcons': snapshot.storageLocationIcons,
       'skinIndex': snapshot.skinIndex,
       'authMode': snapshot.authMode,
       'accountPhone': snapshot.accountPhone,
@@ -457,6 +510,7 @@ class AppStore extends ChangeNotifier {
     _storageLocations
       ..clear()
       ..addAll(['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']);
+    _storageLocationIcons.clear();
     guestStartedAt = now;
     guestAddCount = 0;
     guestDataNotice = '游客数据仅保存 3 天，上一轮游客数据已自动清理';
@@ -505,6 +559,9 @@ class AppStore extends ChangeNotifier {
                 ? const ['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']
                 : result.storageLocations,
           );
+        _storageLocationIcons
+          ..clear()
+          ..addAll(result.storageLocationIcons);
         authMode = 'account';
         _accountCacheLocked = false;
         accountPhone = phone;
@@ -543,6 +600,7 @@ class AppStore extends ChangeNotifier {
       _storageLocations
         ..clear()
         ..addAll(['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']);
+      _storageLocationIcons.clear();
       authMode = 'guest';
       _accountCacheLocked = false;
       accountPhone = '';
@@ -580,11 +638,31 @@ class AppStore extends ChangeNotifier {
 
   Future<void> _expireSession() async {
     try {
-      await logoutToGuest();
-      _globalNotice = '登录状态已失效，请重新登录';
-      notifyListeners();
+      if (isGuest) return;
+      await _mutate(
+        () {
+          _accountCacheLocked = true;
+          cloudSyncPending = false;
+          cloudSyncError = null;
+          sessionToken = '';
+        },
+        allowCorruptedOverwrite: true,
+        syncAccount: false,
+        backupPrevious: false,
+      );
+    } catch (error) {
+      persistenceWarning = '账号缓存保护状态保存失败：$error';
     } finally {
+      try {
+        await _tokenStore.clear();
+      } on Object {
+        persistenceWarning = '登录凭证清理失败';
+      }
+      _accountCacheLocked = true;
+      sessionToken = '';
+      _globalNotice = '登录状态已失效，本地账号数据已保护，请重新登录';
       _sessionExpiryScheduled = false;
+      notifyListeners();
     }
   }
 
@@ -666,6 +744,7 @@ class AppStore extends ChangeNotifier {
       final items = List<InventoryItem>.from(_items);
       final wishlist = List<WishEntry>.from(_wishlist);
       final locations = List<String>.from(_storageLocations);
+      final locationIcons = Map<String, String>.from(_storageLocationIcons);
       final localImages = items
           .expand((item) => item.imagePaths)
           .where(
@@ -682,6 +761,7 @@ class AppStore extends ChangeNotifier {
           items: items,
           wishlist: wishlist,
           storageLocations: locations,
+          storageLocationIcons: locationIcons,
         );
         if (!isAuthenticated || sessionToken != token) return;
         await _writeQueue;
@@ -697,6 +777,9 @@ class AppStore extends ChangeNotifier {
             _storageLocations
               ..clear()
               ..addAll(result.storageLocations);
+            _storageLocationIcons
+              ..clear()
+              ..addAll(result.storageLocationIcons);
             lastCloudSyncedAt = result.syncedAt;
             cloudSyncPending = false;
             cloudSyncError = null;
@@ -747,6 +830,9 @@ class AppStore extends ChangeNotifier {
                 ? const ['玄关', '客厅', '卧室', '书房', '厨房', '卫生间', '其他']
                 : result.storageLocations,
           );
+        _storageLocationIcons
+          ..clear()
+          ..addAll(result.storageLocationIcons);
         lastCloudSyncedAt = result.syncedAt;
       },
       allowCorruptedOverwrite: true,
@@ -851,7 +937,11 @@ class AppStore extends ChangeNotifier {
       final index = _items.indexWhere((item) => item.id == id);
       if (index >= 0) {
         final item = _items[index];
-        _items[index] = item.copyWith(favorite: !item.favorite);
+        final favoriting = !item.favorite;
+        _items[index] = item.copyWith(
+          favorite: favoriting,
+          favoriteAt: favoriting ? DateTime.now().toIso8601String() : '',
+        );
       }
     });
   }
@@ -915,6 +1005,10 @@ class AppStore extends ChangeNotifier {
     double disposalCost = 0,
     String processDate = '',
   }) async {
+    final current = itemById(id);
+    if (current?.status == 'retired' && status != 'retired') {
+      return Future.error(StateError('已退役物品不能更改状态'));
+    }
     await _mutate(() {
       final index = _items.indexWhere((item) => item.id == id);
       if (index < 0) return;
@@ -945,10 +1039,26 @@ class AppStore extends ChangeNotifier {
         'retired' => '物品已退役',
         _ => '恢复使用中',
       };
-      final history = [
-        ...item.statusHistory,
-        StatusEvent(status: status, at: now.toIso8601String(), note: note),
-      ];
+      final history = [...item.statusHistory];
+      if (item.status == status) {
+        final existingIndex = history.lastIndexWhere(
+          (event) => event.status == status,
+        );
+        if (existingIndex >= 0) {
+          if (status != 'inuse') {
+            final existing = history[existingIndex];
+            history[existingIndex] = StatusEvent(
+              status: status,
+              at: existing.at,
+              note: note,
+            );
+          }
+        }
+      } else {
+        history.add(
+          StatusEvent(status: status, at: now.toIso8601String(), note: note),
+        );
+      }
       _items[index] = item.copyWith(
         status: status,
         statusHistory: history,
@@ -1044,7 +1154,7 @@ class AppStore extends ChangeNotifier {
   Future<void> incrementUsage(String id, int delta) async {
     await _mutate(() {
       final index = _items.indexWhere((item) => item.id == id);
-      if (index < 0 || _items[index].usageMode != 'manual') return;
+      if (index < 0 || !_items[index].canRecordManualUsage) return;
       final item = _items[index];
       final records = List<String>.from(item.usageRecords);
       if (delta > 0) {
@@ -1079,7 +1189,12 @@ class AppStore extends ChangeNotifier {
     await _mutate(() {
       final index = _wishlist.indexWhere((entry) => entry.id == id);
       if (index >= 0) {
-        _wishlist[index] = _wishlist[index].copyWith(status: status);
+        _wishlist[index] = _wishlist[index].copyWith(
+          status: status,
+          achievedAt: status == 'achieved'
+              ? DateTime.now().toIso8601String()
+              : _wishlist[index].achievedAt,
+        );
       }
     });
   }
@@ -1088,25 +1203,48 @@ class AppStore extends ChangeNotifier {
     await _mutate(() => _wishlist.removeWhere((entry) => entry.id == id));
   }
 
-  Future<void> addStorageLocation(String name) async {
+  Future<void> addStorageLocation(String name, {String iconKey = ''}) async {
     final clean = name.trim();
     if (clean.isEmpty || _storageLocations.contains(clean)) return;
-    await _mutate(() => _storageLocations.add(clean));
+    if (clean == '未设置位置') {
+      throw ArgumentError('“未设置位置”是系统保留名称');
+    }
+    await _mutate(() {
+      _storageLocations.add(clean);
+      if (iconKey.trim().isNotEmpty) {
+        _storageLocationIcons[clean] = iconKey.trim();
+      }
+    });
   }
 
-  Future<void> renameStorageLocation(String oldName, String newName) async {
+  Future<void> renameStorageLocation(
+    String oldName,
+    String newName, {
+    String iconKey = '',
+  }) async {
     final clean = newName.trim();
     if (clean.isEmpty) throw ArgumentError('收纳位置名称不能为空');
-    if (clean == oldName) return;
-    if (_storageLocations.contains(clean)) {
+    if (clean == '未设置位置') {
+      throw ArgumentError('“未设置位置”是系统保留名称');
+    }
+    if (clean != oldName && _storageLocations.contains(clean)) {
       throw ArgumentError('已存在同名收纳位置');
     }
     await _mutate(() {
       final index = _storageLocations.indexOf(oldName);
-      if (index >= 0) _storageLocations[index] = clean;
+      if (index >= 0) {
+        final resolvedIcon = iconKey.trim().isNotEmpty
+            ? iconKey.trim()
+            : _storageLocationIcons[oldName] ?? '';
+        _storageLocationIcons.remove(oldName);
+        _storageLocations[index] = clean;
+        if (resolvedIcon.isNotEmpty) {
+          _storageLocationIcons[clean] = resolvedIcon;
+        }
+      }
       for (var itemIndex = 0; itemIndex < _items.length; itemIndex++) {
         final item = _items[itemIndex];
-        if (item.storageLocation == oldName) {
+        if (item.storageLocation.trim() == oldName.trim()) {
           _items[itemIndex] = item.copyWith(storageLocation: clean);
         }
       }
@@ -1116,9 +1254,10 @@ class AppStore extends ChangeNotifier {
   Future<void> deleteStorageLocation(String name) async {
     await _mutate(() {
       _storageLocations.removeWhere((location) => location == name);
+      _storageLocationIcons.remove(name);
       for (var index = 0; index < _items.length; index++) {
         final item = _items[index];
-        if (item.storageLocation == name) {
+        if (item.storageLocation.trim() == name.trim()) {
           _items[index] = item.copyWith(storageLocation: '');
         }
       }
@@ -1126,7 +1265,21 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> setSkin(int index) async {
-    await _mutate(() => skinIndex = index);
+    final normalized = _normalizedSkinIndex(index);
+    await _mutate(() => skinIndex = normalized);
+  }
+
+  static int _normalizedSkinIndex(int index) {
+    if (index == -1) return -1;
+    return index >= 0 && index < appSkins.length ? index : 0;
+  }
+
+  static int _migrateLegacySkinIndex(int index) {
+    if (index == -1) return -1;
+    const legacyToCurrent = <int>[0, 1, 1, 2];
+    return index >= 0 && index < legacyToCurrent.length
+        ? legacyToCurrent[index]
+        : 0;
   }
 
   Future<void> resetAll() async {
@@ -1154,6 +1307,7 @@ class _AppSnapshot {
     required this.items,
     required this.wishlist,
     required this.storageLocations,
+    required this.storageLocationIcons,
     required this.skinIndex,
     required this.authMode,
     required this.accountPhone,
@@ -1173,6 +1327,7 @@ class _AppSnapshot {
   final List<InventoryItem> items;
   final List<WishEntry> wishlist;
   final List<String> storageLocations;
+  final Map<String, String> storageLocationIcons;
   final int skinIndex;
   final String authMode;
   final String accountPhone;

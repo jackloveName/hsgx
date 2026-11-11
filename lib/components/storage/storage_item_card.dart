@@ -2,24 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../../models.dart';
 import '../../widgets.dart';
+import '../item_name_text.dart';
 
 class StorageItemCard extends StatelessWidget {
-  const StorageItemCard({
-    super.key,
-    required this.item,
-    required this.onTap,
-    required this.onMove,
-  });
+  const StorageItemCard({super.key, required this.item, required this.onTap});
 
   final InventoryItem item;
   final VoidCallback onTap;
-  final VoidCallback onMove;
 
   @override
   Widget build(BuildContext context) {
+    final showStatus = !const {
+      'repairing',
+      'processed',
+      'retired',
+    }.contains(item.status);
     return SoftCard(
       onTap: onTap,
-      onLongPress: onMove,
       padding: const EdgeInsets.all(8),
       radius: 20,
       child: Column(
@@ -28,36 +27,18 @@ class StorageItemCard extends StatelessWidget {
           Stack(
             children: [
               ItemPhoto(item: item, height: 126, radius: 15),
-              Positioned(
-                left: 7,
-                top: 7,
-                child: StatusPill(status: item.statusInfo, compact: true),
-              ),
-              Positioned(
-                right: 7,
-                bottom: 7,
-                child: Material(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    onTap: onMove,
-                    customBorder: const CircleBorder(),
-                    child: const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: Icon(Icons.drive_file_move_outline, size: 15),
-                    ),
-                  ),
+              if (showStatus)
+                Positioned(
+                  left: 7,
+                  top: 7,
+                  child: StatusPill(status: item.statusInfo, compact: true),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ItemNameText(
+            name: item.name,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 5),
           Row(
@@ -67,7 +48,7 @@ class StorageItemCard extends StatelessWidget {
                   item.categoryInfo.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
               ),
               Text(

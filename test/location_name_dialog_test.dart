@@ -4,8 +4,8 @@ import 'package:hsgx/screens/storage_screen.dart';
 import 'package:hsgx/theme.dart';
 
 void main() {
-  testWidgets('取消新增收纳位置时不会使用已释放的输入控制器', (tester) async {
-    String? result;
+  testWidgets('取消归处底部弹窗时不会使用已释放的输入控制器', (tester) async {
+    StorageLocationDraft? result;
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(),
@@ -14,14 +14,13 @@ void main() {
             builder: (context) => Center(
               child: FilledButton(
                 onPressed: () async {
-                  result = await showLocationNameDialog(
+                  result = await showStorageLocationSheet(
                     context,
-                    title: '新增收纳位置',
-                    hintText: '例如：书房抽屉',
-                    confirmLabel: '添加',
+                    title: '添一处归处',
+                    confirmLabel: '添归处',
                   );
                 },
-                child: const Text('新增收纳位置'),
+                child: const Text('添加归处'),
               ),
             ),
           ),
@@ -29,18 +28,24 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('新增收纳位置').first);
+    await tester.tap(find.text('添加归处'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '书房抽屉');
-    await tester.tap(find.text('取消'));
+    await tester.enterText(
+      find.byKey(const Key('storage-location-name-field')),
+      '书房抽屉',
+    );
+    final cancel = find.text('取消');
+    await tester.ensureVisible(cancel);
+    await tester.tap(cancel);
     await tester.pumpAndSettle();
 
     expect(result, isNull);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('确认新增收纳位置会返回去除首尾空格的名称', (tester) async {
-    String? result;
+  testWidgets('归处底部弹窗返回去除空格的名称和所选图标', (tester) async {
+    StorageLocationDraft? result;
     await tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(),
@@ -49,11 +54,10 @@ void main() {
             builder: (context) => Center(
               child: FilledButton(
                 onPressed: () async {
-                  result = await showLocationNameDialog(
+                  result = await showStorageLocationSheet(
                     context,
-                    title: '新增收纳位置',
-                    hintText: '例如：书房抽屉',
-                    confirmLabel: '添加',
+                    title: '添一处归处',
+                    confirmLabel: '添归处',
                   );
                 },
                 child: const Text('打开弹窗'),
@@ -66,11 +70,19 @@ void main() {
 
     await tester.tap(find.text('打开弹窗'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '  阅读角  ');
-    await tester.tap(find.text('添加'));
+    await tester.enterText(
+      find.byKey(const Key('storage-location-name-field')),
+      '  阅读角  ',
+    );
+    await tester.tap(find.byKey(const Key('storage-location-icon-book')));
+    final submit = find.byKey(const Key('storage-location-submit'));
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
-    expect(result, '阅读角');
+    expect(result?.name, '阅读角');
+    expect(result?.iconKey, 'book');
     expect(tester.takeException(), isNull);
   });
 }

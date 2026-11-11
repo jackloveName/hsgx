@@ -32,12 +32,20 @@ class AgreementService {
     final response = await _config.readPublic(key);
     final text = _extractText(response).trim();
     if (text.isEmpty) throw const FormatException('协议内容为空');
-    final content = _htmlToPlainText(
-      _applyOperator(
-        text,
-        operatorName: AppConfig.agreementOperatorName,
-        contactEmail: AppConfig.agreementContactEmail,
+    final identity = AppConfig.agreementIdentityFor(defaultTargetPlatform);
+    final stripFieldBrackets = defaultTargetPlatform == TargetPlatform.android;
+    final content = _withAgreementIdentity(
+      _htmlToPlainText(
+        _applyOperator(
+          text,
+          operatorName: identity.operatorName,
+          contactEmail: identity.contactEmail,
+          stripFieldBrackets: stripFieldBrackets,
+        ),
       ),
+      operatorName: identity.operatorName,
+      contactEmail: identity.contactEmail,
+      stripFieldBrackets: stripFieldBrackets,
     );
     if (content.isEmpty) throw const FormatException('协议内容为空');
     _cache[key] = (content: content, cachedAt: DateTime.now());
@@ -50,8 +58,8 @@ class AgreementService {
   static String parseResponseBody(
     String raw, {
     TargetPlatform? platform,
-    String operatorName = AppConfig.agreementOperatorName,
-    String contactEmail = AppConfig.agreementContactEmail,
+    String? operatorName,
+    String? contactEmail,
   }) {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) throw const FormatException('协议响应格式错误');
@@ -62,13 +70,42 @@ class AgreementService {
     }
     final text = _extractText(body['data'] ?? body).trim();
     if (text.isEmpty) throw const FormatException('协议内容为空');
-    return _htmlToPlainText(
-      _applyOperator(
-        text,
-        operatorName: operatorName,
-        contactEmail: contactEmail,
+    final targetPlatform = platform ?? defaultTargetPlatform;
+    final identity = AppConfig.agreementIdentityFor(targetPlatform);
+    final stripFieldBrackets = targetPlatform == TargetPlatform.android;
+    return _withAgreementIdentity(
+      _htmlToPlainText(
+        _applyOperator(
+          text,
+          operatorName: operatorName ?? identity.operatorName,
+          contactEmail: contactEmail ?? identity.contactEmail,
+          stripFieldBrackets: stripFieldBrackets,
+        ),
       ),
+      operatorName: operatorName ?? identity.operatorName,
+      contactEmail: contactEmail ?? identity.contactEmail,
+      stripFieldBrackets: stripFieldBrackets,
     );
+  }
+
+  static String _withAgreementIdentity(
+    String content, {
+    required String operatorName,
+    required String contactEmail,
+    bool stripFieldBrackets = false,
+  }) {
+    if (stripFieldBrackets) {
+      operatorName = _stripIdentityBrackets(operatorName);
+      contactEmail = _stripIdentityBrackets(contactEmail);
+    }
+    final identityLines = <String>[
+      if (operatorName.isNotEmpty && !content.contains(operatorName))
+        '运营者：$operatorName',
+      if (contactEmail.isNotEmpty && !content.contains(contactEmail))
+        '联系邮箱：$contactEmail',
+    ];
+    if (identityLines.isEmpty) return content;
+    return '$content\n\n${identityLines.join('\n')}';
   }
 
   static String _extractText(Object? value, [int depth = 0]) {
@@ -103,6 +140,7 @@ class AgreementService {
     String value, {
     required String operatorName,
     required String contactEmail,
+    bool stripFieldBrackets = false,
   }) {
     var result = value;
     if (operatorName.trim().isNotEmpty) {
@@ -115,7 +153,22 @@ class AgreementService {
           .replaceAll(r'${email}', contactEmail.trim())
           .replaceAll('【联系邮箱】', contactEmail.trim());
     }
+    if (stripFieldBrackets) {
+      result = result
+          .replaceAllMapped(
+            RegExp(r'(运营者\s*[：:])\s*【([^】]*)】'),
+            (match) => '${match.group(1)}${match.group(2)}',
+          )
+          .replaceAllMapped(
+            RegExp(r'(联系邮箱\s*[：:])\s*【([^】]*)】'),
+            (match) => '${match.group(1)}${match.group(2)}',
+          );
+    }
     return result;
+  }
+
+  static String _stripIdentityBrackets(String value) {
+    return value.replaceAll('【', '').replaceAll('】', '').trim();
   }
 
   static String _htmlToPlainText(String raw) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../widgets.dart';
 
 class HomeAssetSummary extends StatelessWidget {
   const HomeAssetSummary({
@@ -25,7 +26,8 @@ class HomeAssetSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final usageRate = totalCount == 0 ? 0.0 : inUseCount / totalCount;
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
     return Container(
       padding: const EdgeInsets.fromLTRB(17, 15, 17, 13),
       decoration: BoxDecoration(
@@ -33,12 +35,12 @@ class HomeAssetSummary extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withValues(alpha: 0.94),
-            Color.lerp(primary, Colors.white, 0.92)!,
+            scheme.surfaceContainerLowest.withValues(alpha: 0.96),
+            Color.lerp(primary, scheme.surfaceContainerLowest, 0.92)!,
           ],
         ),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: context.appBorderColor),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF42392D).withValues(alpha: 0.04),
@@ -56,10 +58,10 @@ class HomeAssetSummary extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '当前估值',
                       style: TextStyle(
-                        color: appMuted,
+                        color: context.appMutedColor,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
@@ -67,29 +69,32 @@ class HomeAssetSummary extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       '¥${formatMoney(totalValue, compact: true)}',
-                      style: const TextStyle(
-                        color: appText,
+                      style: TextStyle(
+                        color: context.appTextColor,
                         fontFamily: 'Songti SC',
                         fontSize: 23,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     if (foreignCurrencyItemCount > 0)
-                      const Text(
+                      Text(
                         '人民币合计 · 外币物品未合并',
-                        style: TextStyle(color: appMuted, fontSize: 8),
+                        style: TextStyle(
+                          color: context.appMutedColor,
+                          fontSize: 8,
+                        ),
                       ),
                   ],
                 ),
               ),
               Text(
                 '拥有日均 ¥${formatMoney(ownedDailyCost, compact: true)}',
-                style: const TextStyle(color: appMuted, fontSize: 9),
+                style: TextStyle(color: context.appMutedColor, fontSize: 9),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1, color: Color(0xFFF0EBE4)),
+          const ContentDivider(),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -161,7 +166,10 @@ class _StatusMetric extends StatelessWidget {
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: appMuted, fontSize: 9),
+                        style: TextStyle(
+                          color: context.appMutedColor,
+                          fontSize: 9,
+                        ),
                       ),
                     ),
                   ],
@@ -169,8 +177,8 @@ class _StatusMetric extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: appText,
+                  style: TextStyle(
+                    color: context.appTextColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),

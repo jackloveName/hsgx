@@ -30,4 +30,17 @@ void main() {
 
     expect(find.text('请先阅读并同意隐私政策和平台注册协议'), findsOneWidget);
   });
+
+  testWidgets('键盘完成操作不会提前触发协议校验', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: StartupGate()));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextFormField).at(0), '13800138000');
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.byType(TextFormField).at(1));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+
+    expect(find.text('请先阅读并同意隐私政策和平台注册协议'), findsNothing);
+  });
 }

@@ -15,11 +15,13 @@ class GuestCloudData {
     required this.items,
     required this.wishlist,
     required this.storageLocations,
+    this.storageLocationIcons = const {},
   });
 
   final List<InventoryItem> items;
   final List<WishEntry> wishlist;
   final List<String> storageLocations;
+  final Map<String, String> storageLocationIcons;
 }
 
 class CloudSyncResult {
@@ -27,6 +29,7 @@ class CloudSyncResult {
     required this.items,
     required this.wishlist,
     required this.storageLocations,
+    this.storageLocationIcons = const {},
     required this.uploadedImageCount,
     required this.syncedAt,
   });
@@ -34,6 +37,7 @@ class CloudSyncResult {
   final List<InventoryItem> items;
   final List<WishEntry> wishlist;
   final List<String> storageLocations;
+  final Map<String, String> storageLocationIcons;
   final int uploadedImageCount;
   final DateTime syncedAt;
 }
@@ -63,10 +67,12 @@ class CloudSyncService {
       _readConfig('${phone}WishListData', token),
       _readConfig('${phone}StorageLocations', token),
     ]);
+    final locations = _parseLocationConfig(values[2]);
     return CloudSyncResult(
       items: _parseItems(values[0]),
       wishlist: _parseWishlist(values[1]),
-      storageLocations: _parseLocations(values[2]),
+      storageLocations: locations.names,
+      storageLocationIcons: locations.icons,
       uploadedImageCount: 0,
       syncedAt: DateTime.now(),
     );
@@ -78,6 +84,7 @@ class CloudSyncService {
     required List<InventoryItem> items,
     required List<WishEntry> wishlist,
     required List<String> storageLocations,
+    Map<String, String> storageLocationIcons = const {},
   }) async {
     final prepared = await _prepareItemsWithImages(items, token);
     try {
@@ -87,6 +94,7 @@ class CloudSyncService {
         items: prepared.items,
         wishlist: wishlist,
         storageLocations: storageLocations,
+        storageLocationIcons: storageLocationIcons,
       );
     } catch (_) {
       await _cleanupUploadedImages(
@@ -100,6 +108,7 @@ class CloudSyncService {
       items: prepared.items,
       wishlist: wishlist,
       storageLocations: storageLocations,
+      storageLocationIcons: storageLocationIcons,
       uploadedImageCount: prepared.uploadedImageCount,
       syncedAt: DateTime.now(),
     );
@@ -115,6 +124,7 @@ class CloudSyncService {
       items: const [],
       wishlist: const [],
       storageLocations: const [],
+      storageLocationIcons: const {},
     );
   }
 
@@ -141,7 +151,7 @@ class CloudSyncService {
     ]);
     final remoteItems = _parseItems(remoteValues[0]);
     final remoteWishlist = _parseWishlist(remoteValues[1]);
-    final remoteLocations = _parseLocations(remoteValues[2]);
+    final remoteLocations = _parseLocationConfig(remoteValues[2]);
 
     final prepared = await _prepareItemsWithImages(guest.items, token);
     final migratedItems = prepared.items;
@@ -175,9 +185,21 @@ class CloudSyncService {
     }
 
     final mergedLocations = <String>{
-      ...remoteLocations,
+      ...remoteLocations.names,
       ...guest.storageLocations,
     }.where((location) => location.trim().isNotEmpty).toList();
+    final mergedLocationIcons = <String, String>{
+      for (final location in mergedLocations)
+        if ((guest.storageLocationIcons[location] ??
+                remoteLocations.icons[location] ??
+                '')
+            .trim()
+            .isNotEmpty)
+          location:
+              guest.storageLocationIcons[location] ??
+              remoteLocations.icons[location] ??
+              '',
+    };
 
     try {
       await _saveAccountData(
@@ -186,6 +208,7 @@ class CloudSyncService {
         items: mergedItems,
         wishlist: mergedWishlist,
         storageLocations: mergedLocations,
+        storageLocationIcons: mergedLocationIcons,
       );
     } catch (_) {
       await _cleanupUploadedImages(
@@ -202,6 +225,7 @@ class CloudSyncService {
       items: mergedItems,
       wishlist: mergedWishlist,
       storageLocations: mergedLocations,
+      storageLocationIcons: mergedLocationIcons,
       uploadedImageCount: prepared.uploadedImageCount,
       syncedAt: DateTime.now(),
     );
@@ -311,6 +335,7 @@ class CloudSyncService {
     required List<InventoryItem> items,
     required List<WishEntry> wishlist,
     required List<String> storageLocations,
+    required Map<String, String> storageLocationIcons,
   }) async {
     await Future.wait([
       _saveConfig(
@@ -327,7 +352,7 @@ class CloudSyncService {
       ),
       _saveConfig(
         '${phone}StorageLocations',
-        storageLocations,
+        _encodeLocationConfig(storageLocations, storageLocationIcons),
         '花拾归匣收纳位置配置',
         token,
       ),
@@ -441,14 +466,48 @@ class CloudSyncService {
     return wishes;
   }
 
-  List<String> _parseLocations(Object? value) {
+  List<Object> _encodeLocationConfig(
+    List<String> names,
+    Map<String, String> icons,
+  ) {
+    return [
+      for (final name in names)
+        if ((icons[name] ?? '').trim().isEmpty)
+          name
+        else
+          {'name': name, 'icon': icons[name]!.trim()},
+    ];
+  }
+
+  ({List<String> names, Map<String, String> icons}) _parseLocationConfig(
+    Object? value,
+  ) {
     final decoded = _decodeConfig(value);
-    if (decoded == null) return [];
+    if (decoded == null) {
+      return (names: <String>[], icons: <String, String>{});
+    }
     if (decoded is! List) throw const FormatException('云端收纳位置配置格式错误');
-    return decoded
-        .map((entry) => entry.toString().trim())
-        .where((entry) => entry.isNotEmpty)
-        .toSet()
-        .toList();
+    final names = <String>[];
+    final icons = <String, String>{};
+    for (var index = 0; index < decoded.length; index++) {
+      final entry = decoded[index];
+      if (entry is String) {
+        final name = entry.trim();
+        if (name.isNotEmpty && !names.contains(name)) names.add(name);
+        continue;
+      }
+      if (entry is! Map) {
+        throw FormatException('云端收纳位置配置第 ${index + 1} 项格式错误');
+      }
+      final map = entry.map((key, value) => MapEntry(key.toString(), value));
+      final name = map['name']?.toString().trim() ?? '';
+      if (name.isEmpty) {
+        throw FormatException('云端收纳位置配置第 ${index + 1} 项缺少名称');
+      }
+      if (!names.contains(name)) names.add(name);
+      final icon = map['icon']?.toString().trim() ?? '';
+      if (icon.isNotEmpty) icons[name] = icon;
+    }
+    return (names: names, icons: icons);
   }
 }

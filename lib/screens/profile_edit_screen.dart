@@ -117,7 +117,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         height: 104,
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: context.appSurfaceColor,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -163,7 +163,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   const SizedBox(height: 12),
                   Text(
                     _newLocalAvatar == null ? '点击更换头像' : '新头像将在保存后生效',
-                    style: const TextStyle(color: appMuted, fontSize: 11),
+                    style: TextStyle(
+                      color: context.appMutedColor,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -197,14 +200,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                             child: Text(
                               _birthday.isEmpty ? '请选择生日' : _birthday,
                               style: TextStyle(
-                                color: _birthday.isEmpty ? appMuted : appText,
+                                color: _birthday.isEmpty
+                                    ? context.appPlaceholderColor
+                                    : context.appTextColor,
                               ),
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.calendar_month_outlined,
                             size: 19,
-                            color: appMuted,
+                            color: context.appMutedColor,
                           ),
                         ],
                       ),
@@ -253,13 +258,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('从相册选择'),
+              leading: Icon(Icons.photo_library_outlined),
+              title: Text('从相册选择'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('拍照'),
+              leading: Icon(Icons.photo_camera_outlined),
+              title: Text('拍照'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
           ],
@@ -384,7 +389,7 @@ class _AvatarImage extends StatelessWidget {
   Widget _fallback(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     return ColoredBox(
-      color: Color.lerp(primary, Colors.white, 0.88)!,
+      color: Color.lerp(primary, context.appSurfaceColor, 0.88)!,
       child: Center(
         child: Text(
           fallback,

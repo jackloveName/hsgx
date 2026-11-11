@@ -50,16 +50,25 @@
       <button id="retry" hidden>重新加载</button>
     </main>
     <script>
-      const allowedTypes = new Set(["ZD_PRIVACY_PROTOC", "ZD_REGISTER_PROTOC"]);
       const params = new URLSearchParams(location.search);
+      const privacyTypes = new Set(["HSGX_PRIVACY_PROTOC"]);
+      const registerTypes = new Set(["HSGX_REGISTER_PROTOC"]);
+      const allowedTypes = new Set([...privacyTypes, ...registerTypes]);
       const type = allowedTypes.has(params.get("type"))
         ? params.get("type")
-        : "ZD_PRIVACY_PROTOC";
+        : "HSGX_PRIVACY_PROTOC";
       const api = (params.get("api") || "").replace(/\/$/, "");
+      const isIOS = params.get("dy") === "ios";
+      const operatorName = params.get("operator") ||
+        (isIOS ? "Grant Alston Remington" : "深圳市亮任网络科技有限公司");
+      const contactEmail = params.get("email") ||
+        (isIOS
+          ? "BarncastleFarquer34@outlook.com"
+          : "williamchavez6095@outlook.com");
       const title = document.getElementById("title");
       const content = document.getElementById("content");
       const retry = document.getElementById("retry");
-      title.textContent = type === "ZD_PRIVACY_PROTOC" ? "隐私政策" : "平台注册协议";
+      title.textContent = privacyTypes.has(type) ? "隐私政策" : "平台注册协议";
 
       function extract(value, depth = 0) {
         if (depth > 8 || value == null) return "";
@@ -77,14 +86,35 @@
         return "";
       }
 
+      function applyIdentity(value) {
+        return value
+          .replace(/\$\{name\}/g, operatorName)
+          .replaceAll("【运营者名称】", operatorName)
+          .replace(/\$\{email\}/g, contactEmail)
+          .replaceAll("【联系邮箱】", contactEmail);
+      }
+
       function toText(raw) {
         const holder = document.createElement("textarea");
-        holder.innerHTML = raw
+        holder.innerHTML = applyIdentity(raw)
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<\/(?:p|div|h[1-6]|blockquote|section)>/gi, "\n")
           .replace(/<li[^>]*>/gi, "\n• ")
           .replace(/<[^>]+>/g, "");
         return holder.value.replace(/\n{3,}/g, "\n\n").trim();
+      }
+
+      function withIdentity(value) {
+        const additions = [];
+        if (operatorName && !value.includes(operatorName)) {
+          additions.push(`运营者：${operatorName}`);
+        }
+        if (contactEmail && !value.includes(contactEmail)) {
+          additions.push(`联系邮箱：${contactEmail}`);
+        }
+        return additions.length > 0
+          ? `${value}\n\n${additions.join("\n")}`
+          : value;
       }
 
       async function load() {
@@ -102,7 +132,7 @@
             throw new Error(data.msg || data.message || data.code);
           }
           if (data && data.data !== undefined) data = data.data;
-          const text = toText(extract(data));
+          const text = withIdentity(toText(extract(data)));
           if (!text) throw new Error("协议内容为空");
           content.className = "";
           content.textContent = text;

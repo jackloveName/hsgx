@@ -59,7 +59,7 @@ class _InsightItemsScreenState extends State<InsightItemsScreen> {
             children: [
               Text(
                 '共 ${items.length} 件物品',
-                style: const TextStyle(color: appMuted, fontSize: 11),
+                style: TextStyle(color: context.appMutedColor, fontSize: 11),
               ),
               if (widget.type == 'holding') ...[
                 const SizedBox(height: 12),

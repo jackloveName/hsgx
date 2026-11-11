@@ -86,25 +86,22 @@ class _PrivacyScreenState extends State<PrivacyScreen>
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appSurfaceColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: appBorder),
+              border: Border.all(color: context.appBorderColor),
             ),
             child: TabBar(
               controller: _tabController,
               dividerHeight: 0,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
-                color: Color.lerp(primary, Colors.white, 0.88),
+                color: Color.lerp(primary, context.appSurfaceColor, 0.88),
                 borderRadius: BorderRadius.circular(12),
               ),
               labelColor: primary,
-              unselectedLabelColor: appMuted,
-              labelStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-              unselectedLabelStyle: const TextStyle(
+              unselectedLabelColor: context.appMutedColor,
+              labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              unselectedLabelStyle: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -181,14 +178,14 @@ class _AgreementDocument extends StatelessWidget {
                   size: 30,
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   '协议内容加载失败',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 7),
-                const Text(
+                Text(
                   '请检查网络后重新加载',
-                  style: TextStyle(color: appMuted, fontSize: 12),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 12),
                 ),
                 const SizedBox(height: 18),
                 PrimaryButton(
@@ -206,8 +203,8 @@ class _AgreementDocument extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
           child: SelectableText(
             snapshot.data!,
-            style: const TextStyle(
-              color: Color(0xFF55534F),
+            style: TextStyle(
+              color: context.appTextColor,
               fontSize: 14,
               height: 1.75,
             ),

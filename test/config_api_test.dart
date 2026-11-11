@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hsgx/services/api/api_client.dart';
+import 'package:hsgx/services/api/api_settings.dart';
 import 'package:hsgx/services/api/config_api.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -22,7 +23,7 @@ void main() {
     );
     final config = ConfigApi(client);
 
-    await config.readPublic('ZD_PRIVACY_PROTOC');
+    await config.readPublic(ApiSettings.privacyProtocolKey);
     await config.readUser('13800138000ItemData', 'token');
     await config.saveUser(
       key: '13800138000ItemData',
@@ -33,7 +34,7 @@ void main() {
 
     expect(
       requests[0].url.path,
-      '/mall_admin/ua/app/sys_config/get/value/config/ZD_PRIVACY_PROTOC',
+      '/mall_admin/ua/app/sys_config/get/value/config/HSGX_PRIVACY_PROTOC',
     );
     expect(requests[0].headers['Authorization'], isNull);
     expect(

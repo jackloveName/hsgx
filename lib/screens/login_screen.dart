@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_store.dart';
+import '../components/app_brand_icon.dart';
 import '../models.dart';
 import '../services/agreement_page_launcher.dart';
 import '../services/agreement_service.dart';
@@ -58,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final store = AppStore.instance;
     final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: appBackground,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           const Positioned.fill(child: AppBackdrop(child: SizedBox.expand())),
@@ -146,10 +147,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   controller: _password,
                                   obscureText: !_passwordVisible,
                                   textInputAction: TextInputAction.done,
-                                  onFieldSubmitted: (_) => _submit(),
                                   decoration: InputDecoration(
                                     hintText: '请输入登录密码',
-                                    prefixIcon: const Icon(
+                                    prefixIcon: Icon(
                                       Icons.lock_outline_rounded,
                                       size: 20,
                                     ),
@@ -179,14 +179,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                   controller: _code,
                                   keyboardType: TextInputType.number,
                                   textInputAction: TextInputAction.done,
-                                  onFieldSubmitted: (_) => _submit(),
                                   inputFormatters: [
                                     FilteringTextInputFormatter.digitsOnly,
                                     LengthLimitingTextInputFormatter(6),
                                   ],
                                   decoration: InputDecoration(
                                     hintText: '请输入短信验证码',
-                                    prefixIcon: const Icon(
+                                    prefixIcon: Icon(
                                       Icons.verified_outlined,
                                       size: 20,
                                     ),
@@ -200,7 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                             : _sendingCode
                                             ? '发送中'
                                             : '获取验证码',
-                                        style: const TextStyle(fontSize: 11),
+                                        style: TextStyle(fontSize: 11),
                                       ),
                                     ),
                                   ),
@@ -232,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 18),
                         TextButton(
                           onPressed: _submitting ? null : _continueAsGuest,
-                          child: const Text('暂不登录，继续使用游客模式'),
+                          child: Text('暂不登录，继续使用游客模式'),
                         ),
                       ],
                     ),
@@ -307,7 +306,7 @@ class _LoginScreenState extends State<LoginScreen> {
         session.token,
         fallbackPhone: session.phone,
       );
-      final guestData = AppStore.instance.guestCloudData;
+      final guestData = AppStore.instance.dataForAccountLogin(session.phone);
       final result = await _cloudService.syncGuestData(
         phone: session.phone,
         token: session.token,
@@ -372,49 +371,42 @@ class _LoginHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: 82,
-          height: 82,
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: primary.withValues(alpha: 0.18),
-                blurRadius: 28,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Image.asset(
-              'static/image/app-icon-192.png',
-              fit: BoxFit.cover,
-            ),
-          ),
+        AppBrandIcon(
+          size: 82,
+          padding: 5,
+          radius: 25,
+          shadowColor: primary.withValues(alpha: 0.18),
+          shadowBlur: 28,
+          shadowOffset: const Offset(0, 12),
         ),
         const SizedBox(height: 18),
-        const Text(
+        Text(
           '花拾归匣',
           style: TextStyle(
             fontFamily: 'Songti SC',
-            color: appText,
+            color: context.appTextColor,
             fontSize: 31,
             fontWeight: FontWeight.w800,
             letterSpacing: 3,
           ),
         ),
         const SizedBox(height: 7),
-        const Text(
+        Text(
           '物有所归，心有所安',
-          style: TextStyle(color: appMuted, fontSize: 12, letterSpacing: 1.5),
+          style: TextStyle(
+            color: context.appMutedColor,
+            fontSize: 12,
+            letterSpacing: 1.5,
+          ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           '拾一件 · 归一处 · 藏一匣',
-          style: TextStyle(color: appMuted, fontSize: 9, letterSpacing: 1.1),
+          style: TextStyle(
+            color: context.appMutedColor,
+            fontSize: 9,
+            letterSpacing: 1.1,
+          ),
         ),
       ],
     );
@@ -433,7 +425,7 @@ class _LocalDataSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Color.lerp(primary, Colors.white, 0.9),
+        color: Color.lerp(primary, context.appSurfaceColor, 0.9),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -452,14 +444,14 @@ class _LocalDataSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '登录后继续使用完整功能',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$itemCount 件物品 · $wishCount 个心愿',
-                  style: const TextStyle(color: appMuted, fontSize: 10),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 10),
                 ),
               ],
             ),
@@ -486,7 +478,7 @@ class _ModeSwitcher extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F1EC),
+        color: context.appSurfaceMutedColor,
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -547,7 +539,7 @@ class _ModeItem extends StatelessWidget {
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: selected ? primary : appMuted,
+                color: selected ? primary : context.appMutedColor,
                 fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
@@ -597,17 +589,17 @@ class _AgreementRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 5),
             child: Wrap(
               children: [
-                const Text(
+                Text(
                   '已阅读并同意',
-                  style: TextStyle(color: appMuted, fontSize: 11),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 11),
                 ),
                 _AgreementLink(
                   label: '《隐私政策》',
                   onTap: () => onOpenAgreement(0),
                 ),
-                const Text(
+                Text(
                   '和',
-                  style: TextStyle(color: appMuted, fontSize: 11),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 11),
                 ),
                 _AgreementLink(
                   label: '《平台注册协议》',
@@ -654,22 +646,21 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF2F4),
+        color: Color.alphaBlend(
+          Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
+          context.appSurfaceColor,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.info_outline_rounded,
-            color: Color(0xFFC04F68),
-            size: 17,
-          ),
+          Icon(Icons.info_outline_rounded, color: Color(0xFFC04F68), size: 17),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFFC04F68),
                 fontSize: 11,
                 height: 1.5,
@@ -767,7 +758,7 @@ class _LoginButton extends StatelessWidget {
                               ),
                             ],
                           )
-                        : const Text(
+                        : Text(
                             '登录',
                             key: ValueKey('login-idle'),
                             style: TextStyle(

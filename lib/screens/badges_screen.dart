@@ -126,7 +126,7 @@ class _BadgesScreenState extends State<BadgesScreen>
                                         unlocked > 0
                                             ? '匣中已亮起 $unlocked 枚星光'
                                             : '第一枚星光正等你拾起',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,
                                           fontWeight: FontWeight.w800,
@@ -144,7 +144,7 @@ class _BadgesScreenState extends State<BadgesScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 6),
-                                const Text(
+                                Text(
                                   '认真记录、好好使用、温柔告别，徽章会自己悄悄出现。',
                                   style: TextStyle(
                                     color: Colors.white70,
@@ -290,14 +290,14 @@ class _BadgesScreenState extends State<BadgesScreen>
     return [
       _BadgeGroup(
         name: '收藏成长',
-        color: const Color(0xFF3A9D8A),
+        color: const Color(0xFF315F57),
         badges: [
           _badge(
             'first',
             '拾',
             '初次拾取',
             '登记第一件生活物品',
-            0xFF3A9D8A,
+            0xFF315F57,
             items.length,
             1,
           ),
@@ -342,7 +342,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '爱',
             '收藏家',
             '收藏二十件物品',
-            0xFFE7849A,
+            0xFFB56D78,
             favoriteCount,
             20,
           ),
@@ -385,7 +385,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '尽',
             '物尽其用',
             '累计记录一百次使用',
-            0xFF3A9D8A,
+            0xFF315F57,
             usageCount,
             100,
           ),
@@ -439,7 +439,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '联',
             '组合使用家',
             '关联五组互相关联的物品',
-            0xFF6C9FE8,
+            0xFF647B91,
             relationCount,
             5,
           ),
@@ -463,7 +463,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '舍',
             '理性取舍',
             '放下一件不再需要的心愿',
-            0xFFE7849A,
+            0xFFB56D78,
             abandonedWishes,
             1,
           ),
@@ -472,7 +472,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '定',
             '冷静达人',
             '完成五次心愿决策',
-            0xFF6C9FE8,
+            0xFF647B91,
             decidedWishes,
             5,
           ),
@@ -526,7 +526,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '舍',
             '清醒舍弃',
             '认真放弃二十个不再需要的心愿',
-            0xFFE7849A,
+            0xFFB56D78,
             abandonedWishes,
             20,
           ),
@@ -534,14 +534,14 @@ class _BadgesScreenState extends State<BadgesScreen>
       ),
       _BadgeGroup(
         name: '生命周期',
-        color: const Color(0xFF6C9FE8),
+        color: const Color(0xFF647B91),
         badges: [
           _badge(
             'recovery',
             '回',
             '回血行动',
             '完成一次闲置物品处理',
-            0xFFE4B15C,
+            0xFFA77F4E,
             processedCount,
             1,
           ),
@@ -568,7 +568,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '清',
             '闲置清零',
             '有物品时保持没有长期闲置',
-            0xFF3A9D8A,
+            0xFF315F57,
             items.isNotEmpty && idleCount == 0 ? 1 : 0,
             1,
           ),
@@ -618,7 +618,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '售',
             '转卖小能手',
             '完成五次物品转卖',
-            0xFF6C9FE8,
+            0xFF647B91,
             saleCount,
             5,
           ),
@@ -642,7 +642,7 @@ class _BadgesScreenState extends State<BadgesScreen>
             '录',
             '生活记录者',
             '为五件物品补充照片、备注或标签',
-            0xFF6C9FE8,
+            0xFF647B91,
             contentCount,
             5,
           ),
@@ -1161,7 +1161,7 @@ class _BadgeMedal extends StatelessWidget {
                     ),
                     child: Text(
                       glyph,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 7,
                         height: 1,
@@ -1504,18 +1504,37 @@ class _BadgeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = badge.unlocked ? badge.color : const Color(0xFFB4AEA7);
+    final accent = badge.unlocked ? badge.color : context.appMutedColor;
+    final stackedProgress = MediaQuery.textScalerOf(context).scale(10) > 13;
+    final progressBar = ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: LinearProgressIndicator(
+        value: badge.progress,
+        minHeight: 4,
+        backgroundColor: context.appSurfaceMutedColor,
+        color: accent,
+      ),
+    );
+    final progressText = Text(
+      badge.progressText,
+      key: Key('badge-progress-${badge.id}'),
+      style: TextStyle(
+        color: badge.unlocked ? badge.color : context.appMutedColor,
+        fontSize: 8,
+        fontWeight: badge.unlocked ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
     return SoftCard(
       key: Key('badge-card-${badge.id}'),
       onTap: onTap,
       padding: const EdgeInsets.fromLTRB(9, 9, 9, 10),
       radius: 19,
       color: badge.unlocked
-          ? Color.lerp(Colors.white, badge.color, 0.055)!
-          : Colors.white,
+          ? Color.lerp(context.appSurfaceColor, badge.color, 0.055)!
+          : context.appSurfaceColor,
       borderColor: badge.unlocked
           ? badge.color.withValues(alpha: 0.24)
-          : appBorder,
+          : context.appBorderColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1537,7 +1556,7 @@ class _BadgeCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           Container(
@@ -1545,36 +1564,28 @@ class _BadgeCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: badge.unlocked
                   ? badge.color.withValues(alpha: 0.055)
-                  : const Color(0xFFF7F4EF),
+                  : context.appSurfaceMutedColor,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: badge.progress,
-                      minHeight: 4,
-                      backgroundColor: const Color(0xFFE8E2D9),
-                      color: accent,
-                    ),
+            child: stackedProgress
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      progressBar,
+                      const SizedBox(height: 3),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: progressText,
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: progressBar),
+                      const SizedBox(width: 7),
+                      progressText,
+                    ],
                   ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  badge.progressText,
-                  key: Key('badge-progress-${badge.id}'),
-                  style: TextStyle(
-                    color: badge.unlocked ? badge.color : appMuted,
-                    fontSize: 8,
-                    fontWeight: badge.unlocked
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -1596,6 +1607,8 @@ class _BadgeCabinet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final cardExtent = 156 + (textScale - 1).clamp(0, 1).toDouble() * 72;
     final start = Color.lerp(scheme.primary, const Color(0xFF172A24), 0.58)!;
     final end = Color.lerp(scheme.secondary, const Color(0xFF1A2828), 0.68)!;
     final hasEmptySlot = group.badges.length.isOdd;
@@ -1644,7 +1657,7 @@ class _BadgeCabinet extends StatelessWidget {
                     Expanded(
                       child: Text(
                         group.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontFamily: 'Songti SC',
                           fontSize: 19,
@@ -1666,7 +1679,7 @@ class _BadgeCabinet extends StatelessWidget {
                       ),
                       child: Text(
                         '${group.unlocked}/${group.badges.length}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white70,
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
@@ -1679,11 +1692,11 @@ class _BadgeCabinet extends StatelessWidget {
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 230,
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
-                    mainAxisExtent: 156,
+                    mainAxisExtent: cardExtent,
                   ),
                   itemCount: group.badges.length + (hasEmptySlot ? 1 : 0),
                   itemBuilder: (context, index) {
@@ -1838,7 +1851,7 @@ class _NextBadgeCard extends StatelessWidget {
       key: const Key('next-badge-card'),
       onTap: onTap,
       padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
-      color: Color.lerp(Colors.white, badge.color, 0.075)!,
+      color: Color.lerp(context.appSurfaceColor, badge.color, 0.075)!,
       borderColor: badge.color.withValues(alpha: 0.25),
       radius: 21,
       child: Row(
@@ -1870,17 +1883,14 @@ class _NextBadgeCard extends StatelessWidget {
                   badge.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   badge.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
                 const SizedBox(height: 9),
                 Row(
@@ -1891,7 +1901,7 @@ class _NextBadgeCard extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: badge.progress,
                           minHeight: 6,
-                          backgroundColor: const Color(0xFFE9E4DC),
+                          backgroundColor: context.appSurfaceMutedColor,
                           color: badge.color,
                         ),
                       ),
@@ -1911,7 +1921,11 @@ class _NextBadgeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: appMuted, size: 19),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: context.appMutedColor,
+            size: 19,
+          ),
         ],
       ),
     );
@@ -1925,13 +1939,13 @@ class _AllBadgesUnlockedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     return SoftCard(
-      color: Color.lerp(Colors.white, primary, 0.07)!,
+      color: Color.lerp(context.appSurfaceColor, primary, 0.07)!,
       borderColor: primary.withValues(alpha: 0.24),
       child: Row(
         children: [
           Icon(Icons.auto_awesome_rounded, color: primary, size: 24),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1942,7 +1956,7 @@ class _AllBadgesUnlockedCard extends StatelessWidget {
                 SizedBox(height: 3),
                 Text(
                   '这座收藏匣已经装满了生活的星光。',
-                  style: TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
               ],
             ),
@@ -1962,9 +1976,9 @@ class _BadgeDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: context.appSurfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -1975,7 +1989,7 @@ class _BadgeDetailsSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFE1DCD5),
+                color: context.appBorderColor,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -1991,14 +2005,14 @@ class _BadgeDetailsSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               badge.name,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
               badge.description,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: appMuted,
+              style: TextStyle(
+                color: context.appMutedColor,
                 fontSize: 11,
                 height: 1.5,
               ),
@@ -2009,7 +2023,7 @@ class _BadgeDetailsSheet extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: badge.progress,
                 minHeight: 7,
-                backgroundColor: const Color(0xFFF1EEE9),
+                backgroundColor: context.appSurfaceMutedColor,
                 color: badge.color,
               ),
             ),
@@ -2019,7 +2033,7 @@ class _BadgeDetailsSheet extends StatelessWidget {
                 Text(
                   '完成度',
                   style: TextStyle(
-                    color: badge.unlocked ? badge.color : appMuted,
+                    color: badge.unlocked ? badge.color : context.appMutedColor,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2028,7 +2042,7 @@ class _BadgeDetailsSheet extends StatelessWidget {
                 Text(
                   badge.progressText,
                   style: TextStyle(
-                    color: badge.unlocked ? badge.color : appMuted,
+                    color: badge.unlocked ? badge.color : context.appMutedColor,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2111,7 +2125,7 @@ class _UnlockCelebration extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            const Text(
+                            Text(
                               '新徽章点亮',
                               style: TextStyle(
                                 fontSize: 9,

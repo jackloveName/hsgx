@@ -22,9 +22,17 @@ class AppBackdrop extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color.lerp(scheme.primary, Colors.white, 0.9)!,
+            Color.lerp(
+              Theme.of(context).scaffoldBackgroundColor,
+              scheme.primary,
+              Theme.of(context).brightness == Brightness.dark ? 0.12 : 0.08,
+            )!,
             Theme.of(context).scaffoldBackgroundColor,
-            Color.lerp(scheme.secondary, Colors.white, 0.92)!,
+            Color.lerp(
+              Theme.of(context).scaffoldBackgroundColor,
+              scheme.secondary,
+              Theme.of(context).brightness == Brightness.dark ? 0.1 : 0.06,
+            )!,
           ],
           stops: const [0, 0.48, 1],
         ),
@@ -43,10 +51,21 @@ class PageFrame extends StatelessWidget {
     this.showBack = true,
     this.padding = const EdgeInsets.fromLTRB(20, 8, 20, 32),
     this.maxContentWidth = 760,
-  });
+  }) : slivers = null;
+
+  const PageFrame.slivers({
+    super.key,
+    required this.title,
+    required this.slivers,
+    this.action,
+    this.showBack = true,
+    this.padding = const EdgeInsets.fromLTRB(20, 8, 20, 32),
+    this.maxContentWidth = 760,
+  }) : child = null;
 
   final String title;
-  final Widget child;
+  final Widget? child;
+  final List<Widget>? slivers;
   final Widget? action;
   final bool showBack;
   final EdgeInsets padding;
@@ -84,7 +103,7 @@ class PageFrame extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Songti SC',
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
@@ -101,22 +120,39 @@ class PageFrame extends StatelessWidget {
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
+                    final availableWidth = math.max(
+                      0.0,
+                      constraints.maxWidth - padding.horizontal,
+                    );
                     final contentWidth = math
-                        .min(
-                          math.max(
-                            0.0,
-                            constraints.maxWidth - padding.horizontal,
-                          ),
-                          maxContentWidth,
-                        )
+                        .min(availableWidth, maxContentWidth)
                         .toDouble();
+                    if (slivers != null) {
+                      final extraSidePadding =
+                          math.max(0.0, availableWidth - contentWidth) / 2;
+                      return CustomScrollView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        slivers: [
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                              padding.left + extraSidePadding,
+                              padding.top,
+                              padding.right + extraSidePadding,
+                              padding.bottom,
+                            ),
+                            sliver: SliverMainAxisGroup(slivers: slivers!),
+                          ),
+                        ],
+                      );
+                    }
                     return SingleChildScrollView(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: padding,
                       child: Align(
                         alignment: Alignment.topCenter,
-                        child: SizedBox(width: contentWidth, child: child),
+                        child: SizedBox(width: contentWidth, child: child!),
                       ),
                     );
                   },
@@ -166,10 +202,11 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(15),
         child: InkWell(
           onTap: onTap,
@@ -177,7 +214,7 @@ class _RoundIconButton extends StatelessWidget {
           child: SizedBox(
             width: 44,
             height: 44,
-            child: Icon(icon, size: 19, color: appText),
+            child: Icon(icon, size: 19, color: scheme.onSurface),
           ),
         ),
       ),
@@ -192,32 +229,35 @@ class SoftCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(18),
     this.onTap,
     this.onLongPress,
-    this.borderColor = appBorder,
-    this.color = Colors.white,
-    this.radius = 22,
+    this.borderColor,
+    this.color,
+    this.radius = 18,
   });
 
   final Widget child;
   final EdgeInsets padding;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
-  final Color borderColor;
-  final Color color;
+  final Color? borderColor;
+  final Color? color;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final content = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor ?? scheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF42392D).withValues(alpha: 0.045),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: scheme.shadow.withValues(
+              alpha: scheme.brightness == Brightness.dark ? 0.16 : 0.03,
+            ),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -262,12 +302,12 @@ class GradientCard extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: resolvedColors,
         ),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: resolvedColors.first.withValues(alpha: 0.2),
-            blurRadius: 28,
-            offset: const Offset(0, 12),
+            color: resolvedColors.first.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -278,7 +318,7 @@ class GradientCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(24),
         child: content,
       ),
     );
@@ -319,12 +359,29 @@ class SectionHeading extends StatelessWidget {
           const SizedBox(width: 9),
           Text(
             title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const Spacer(),
           ?trailing,
         ],
       ),
+    );
+  }
+}
+
+class ContentDivider extends StatelessWidget {
+  const ContentDivider({super.key, this.indent = 0, this.endIndent = 14});
+
+  final double indent;
+  final double endIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      indent: indent,
+      endIndent: endIndent,
+      color: context.appBorderColor,
     );
   }
 }
@@ -343,12 +400,21 @@ class CategoryImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = scheme.brightness == Brightness.dark;
     return Container(
       width: size,
       height: size,
       padding: EdgeInsets.all(size * 0.16),
       decoration: BoxDecoration(
-        color: backgroundColor ?? category.softColor,
+        color:
+            backgroundColor ??
+            (dark
+                ? Color.alphaBlend(
+                    category.color.withValues(alpha: 0.16),
+                    scheme.surfaceContainerLowest,
+                  )
+                : category.softColor),
         borderRadius: BorderRadius.circular(size * 0.27),
       ),
       child: Image.asset(category.asset, fit: BoxFit.contain),
@@ -371,12 +437,19 @@ class ItemVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final image = item.imagePath;
+    final scheme = Theme.of(context).colorScheme;
+    final dark = scheme.brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Container(
         width: size,
         height: size,
-        color: item.categoryInfo.softColor,
+        color: dark
+            ? Color.alphaBlend(
+                item.categoryInfo.color.withValues(alpha: 0.16),
+                scheme.surfaceContainerLowest,
+              )
+            : item.categoryInfo.softColor,
         child: image.isNotEmpty
             ? _LocalOrAssetImage(
                 path: image,
@@ -479,19 +552,30 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = scheme.brightness == Brightness.dark;
+    final background = dark
+        ? Color.alphaBlend(
+            status.color.withValues(alpha: 0.18),
+            scheme.surfaceContainerLowest,
+          )
+        : status.softColor;
+    final foreground = dark
+        ? Color.lerp(status.color, Colors.white, 0.4)!
+        : status.color;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 8 : 10,
         vertical: compact ? 3 : 5,
       ),
       decoration: BoxDecoration(
-        color: status.softColor,
+        color: background,
         borderRadius: BorderRadius.circular(9),
       ),
       child: Text(
         status.name,
         style: TextStyle(
-          color: status.color,
+          color: foreground,
           fontSize: compact ? 10 : 11,
           fontWeight: FontWeight.w700,
         ),
@@ -507,16 +591,17 @@ class TagPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF2EEF8),
+        color: scheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         '#$label',
-        style: const TextStyle(
-          color: Color(0xFF756785),
+        style: TextStyle(
+          color: scheme.onSecondaryContainer,
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
@@ -547,7 +632,7 @@ class PrimaryButton extends StatelessWidget {
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: color ?? Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         minimumSize: const Size(0, 48),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -555,7 +640,7 @@ class PrimaryButton extends StatelessWidget {
       icon: icon == null ? const SizedBox.shrink() : Icon(icon, size: 18),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
       ),
     );
     return expanded ? SizedBox(width: double.infinity, child: button) : button;
@@ -579,6 +664,7 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = AppThemeTokens.of(context).softPrimary;
     return SizedBox(
       width: double.infinity,
       child: SoftCard(
@@ -589,7 +675,7 @@ class EmptyState extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Color.lerp(primary, Colors.white, 0.88),
+                color: softPrimary,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Icon(icon, color: primary, size: 30),
@@ -597,14 +683,14 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 7),
             Text(
               description,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: appMuted,
+              style: TextStyle(
+                color: context.appMutedColor,
                 fontSize: 13,
                 height: 1.6,
               ),
@@ -673,7 +759,9 @@ class BottomSelectField<T> extends StatelessWidget {
             floatingLabelBehavior: FloatingLabelBehavior.always,
             suffixIcon: Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: enabled ? appMuted : appMuted.withValues(alpha: 0.45),
+              color: enabled
+                  ? context.appMutedColor
+                  : context.appMutedColor.withValues(alpha: 0.45),
             ),
           ),
           child: Row(
@@ -688,7 +776,9 @@ class BottomSelectField<T> extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: selected == null || !enabled ? appMuted : appText,
+                    color: selected == null || !enabled
+                        ? context.appPlaceholderColor
+                        : context.appTextColor,
                     fontSize: 14,
                   ),
                 ),
@@ -708,14 +798,15 @@ class BottomSelectField<T> extends StatelessWidget {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        final primary = Theme.of(context).colorScheme.primary;
+        final scheme = Theme.of(context).colorScheme;
+        final primary = scheme.primary;
         return Container(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(context).height * 0.68,
           ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLowest,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: SafeArea(
             top: false,
@@ -727,7 +818,7 @@ class BottomSelectField<T> extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0DCD5),
+                    color: scheme.outlineVariant,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -738,7 +829,7 @@ class BottomSelectField<T> extends StatelessWidget {
                       Expanded(
                         child: Text(
                           label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
@@ -747,26 +838,23 @@ class BottomSelectField<T> extends StatelessWidget {
                       IconButton(
                         tooltip: '关闭',
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close_rounded,
-                          color: appMuted,
+                          color: context.appMutedColor,
                           size: 20,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFF1EDE7)),
+                const ContentDivider(),
                 Flexible(
                   child: ListView.separated(
                     shrinkWrap: true,
                     padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
                     itemCount: options.length,
-                    separatorBuilder: (_, _) => const Divider(
-                      height: 1,
-                      indent: 54,
-                      color: Color(0xFFF4F0EA),
-                    ),
+                    separatorBuilder: (_, _) =>
+                        const ContentDivider(indent: 54),
                     itemBuilder: (context, index) {
                       final option = options[index];
                       final isSelected = option.value == value;
@@ -784,7 +872,9 @@ class BottomSelectField<T> extends StatelessWidget {
                           title: Text(
                             option.label,
                             style: TextStyle(
-                              color: isSelected ? primary : appText,
+                              color: isSelected
+                                  ? primary
+                                  : context.appTextColor,
                               fontSize: 14,
                               fontWeight: isSelected
                                   ? FontWeight.w700
@@ -840,7 +930,7 @@ class MiniMetric extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: dark ? Colors.white70 : appMuted,
+            color: dark ? Colors.white70 : context.appMutedColor,
             fontSize: 11,
           ),
         ),
@@ -850,7 +940,7 @@ class MiniMetric extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: dark ? Colors.white : appText,
+            color: dark ? Colors.white : context.appTextColor,
             fontSize: 19,
             fontWeight: FontWeight.w800,
           ),
@@ -1052,12 +1142,12 @@ Future<bool> confirmAction(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: Text('取消'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: destructive
-                    ? const Color(0xFFC6657D)
+                    ? const Color(0xFFA65F5F)
                     : Theme.of(context).colorScheme.primary,
               ),
               onPressed: () => Navigator.pop(context, true),
@@ -1077,18 +1167,21 @@ Future<DateTime?> showAppDatePicker(
   String title = '选择日期',
   String confirmLabel = '确定',
 }) {
-  var initial = initialDate;
-  if (initial.isBefore(firstDate)) initial = firstDate;
-  if (initial.isAfter(lastDate)) initial = lastDate;
+  final first = DateUtils.dateOnly(firstDate);
+  final last = DateUtils.dateOnly(lastDate);
+  var initial = DateUtils.dateOnly(initialDate);
+  if (initial.isBefore(first)) initial = first;
+  if (initial.isAfter(last)) initial = last;
   return showModalBottomSheet<DateTime>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (_) => _BottomDatePickerSheet(
       initialDate: initial,
-      firstDate: firstDate,
-      lastDate: lastDate,
+      firstDate: first,
+      lastDate: last,
       title: title,
       confirmLabel: confirmLabel,
     ),
@@ -1119,14 +1212,16 @@ class _BottomDatePickerSheetState extends State<_BottomDatePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
+    final softPrimary = AppThemeTokens.of(context).softPrimary;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.78,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
       ),
       child: SafeArea(
         top: false,
@@ -1134,53 +1229,67 @@ class _BottomDatePickerSheetState extends State<_BottomDatePickerSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+              padding: const EdgeInsets.fromLTRB(20, 10, 14, 8),
               child: Column(
                 children: [
                   Container(
-                    width: 40,
-                    height: 4,
+                    width: 42,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE0DCD5),
+                      color: scheme.outlineVariant,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: softPrimary,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.calendar_month_outlined,
+                          color: primary,
+                          size: 21,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           widget.title,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
+                          style: TextStyle(
+                            fontFamily: 'Songti SC',
+                            fontSize: 21,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      TextButton(
+                      IconButton(
+                        tooltip: '关闭',
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('取消'),
+                        style: IconButton.styleFrom(
+                          backgroundColor: scheme.surfaceContainer,
+                          foregroundColor: context.appMutedColor,
+                          minimumSize: const Size(36, 36),
+                          maximumSize: const Size(36, 36),
+                        ),
+                        icon: Icon(Icons.close_rounded, size: 18),
                       ),
                     ],
                   ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _formatChineseDate(_selectedDate),
-                      style: TextStyle(
-                        color: primary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 8),
+                  Container(height: 1, color: primary.withValues(alpha: 0.08)),
                 ],
               ),
             ),
             Flexible(
               child: SingleChildScrollView(
                 child: CalendarDatePicker(
-                  initialDate: widget.initialDate,
+                  initialDate: _selectedDate,
                   firstDate: widget.firstDate,
                   lastDate: widget.lastDate,
                   currentDate: DateTime.now(),
@@ -1192,21 +1301,47 @@ class _BottomDatePickerSheetState extends State<_BottomDatePickerSheet> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: PrimaryButton(
-                label: widget.confirmLabel,
-                icon: Icons.check_rounded,
-                onPressed: () => Navigator.pop(context, _selectedDate),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        side: BorderSide(
+                          color: primary.withValues(alpha: 0.22),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                      child: Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context, _selectedDate),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                      child: Text(
+                        widget.confirmLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatChineseDate(DateTime date) {
-    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
-    return '${date.year}年${date.month}月${date.day}日 '
-        '星期${weekdays[date.weekday - 1]}';
   }
 }

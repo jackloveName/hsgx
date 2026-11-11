@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../app_store.dart';
+import '../components/bottom_sheet_handle.dart';
+import '../components/item_name_text.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'item_detail_screen.dart';
@@ -46,7 +50,7 @@ class RecoveryScreen extends StatelessWidget {
         final discardCount = recoveredItems
             .where((item) => item.disposalMethod == '丢弃')
             .length;
-        final hasForeignCurrency = store.activeItems.any(
+        final hasForeignCurrency = recoveredItems.any(
           (item) => !item.canAggregateInBaseCurrency,
         );
 
@@ -91,16 +95,16 @@ class RecoveryScreen extends StatelessWidget {
               ),
               if (hasForeignCurrency) ...[
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '金额统计仅合计人民币，外币物品仍保留在下方清单中',
-                  style: TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
               ],
               if (recovered && (giftCount > 0 || discardCount > 0)) ...[
                 const SizedBox(height: 8),
                 Text(
                   '另有转赠 $giftCount 件 · 丢弃 $discardCount 件，未计入回血金额',
-                  style: const TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 9),
                 ),
               ],
               if (recovered) ...[
@@ -149,8 +153,11 @@ class RecoveryScreen extends StatelessWidget {
   }
 
   Future<void> _planRecovery(BuildContext context, InventoryItem item) async {
-    final result = await showDialog<_RecoveryPlanResult>(
+    final result = await showModalBottomSheet<_RecoveryPlanResult>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _RecoveryPlanDialog(item: item),
     );
     if (result == null || !context.mounted) return;
@@ -189,8 +196,11 @@ class RecoveryScreen extends StatelessWidget {
     BuildContext context,
     InventoryItem item,
   ) async {
-    final result = await showDialog<_RecoveryResult>(
+    final result = await showModalBottomSheet<_RecoveryResult>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _RecoveryDialog(item: item),
     );
     if (result == null || !context.mounted) return;
@@ -240,14 +250,9 @@ class _PendingRecoveryCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  ItemNameText(
+                    name: item.name,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -257,7 +262,7 @@ class _PendingRecoveryCard extends StatelessWidget {
                     '–${item.currencySymbol}${formatMoney(item.recoveryEstimateHigh, compact: true)}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: appMuted, fontSize: 9),
+                    style: TextStyle(color: context.appMutedColor, fontSize: 9),
                   ),
                 ],
               ),
@@ -271,7 +276,7 @@ class _PendingRecoveryCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 visualDensity: VisualDensity.compact,
               ),
-              child: const Text('制定计划', style: TextStyle(fontSize: 11)),
+              child: Text('制定计划', style: TextStyle(fontSize: 11)),
             ),
           ],
         ),
@@ -326,11 +331,9 @@ class _PlannedRecoveryCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 7),
                         Expanded(
-                          child: Text(
-                            item.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                          child: ItemNameText(
+                            name: item.name,
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
                             ),
@@ -369,7 +372,7 @@ class _PlannedRecoveryCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   visualDensity: VisualDensity.compact,
                 ),
-                child: const Text('完成', style: TextStyle(fontSize: 11)),
+                child: Text('完成', style: TextStyle(fontSize: 11)),
               ),
             ],
           ),
@@ -468,7 +471,7 @@ class _PlanMetricChip extends StatelessWidget {
         text,
         maxLines: 1,
         style: TextStyle(
-          color: emphasized ? primary : appMuted,
+          color: emphasized ? primary : context.appMutedColor,
           fontSize: 9,
           fontWeight: emphasized ? FontWeight.w700 : FontWeight.w600,
         ),
@@ -500,19 +503,17 @@ class _ProcessedRecoveryCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  ItemNameText(
+                    name: item.name,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     _processedSummary(item),
-                    style: const TextStyle(color: appMuted, fontSize: 10),
+                    style: TextStyle(
+                      color: context.appMutedColor,
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
@@ -609,9 +610,6 @@ class _RecoveryPlanDialogState extends State<_RecoveryPlanDialog> {
   late final TextEditingController _note = TextEditingController(
     text: widget.item.recoveryNote,
   );
-  late String _deadline = widget.item.recoveryDeadline.isEmpty
-      ? formatDate(DateTime.now().add(const Duration(days: 14)))
-      : widget.item.recoveryDeadline;
 
   bool get _cashMethod => _method == '转卖' || _method == '回收';
 
@@ -633,19 +631,6 @@ class _RecoveryPlanDialogState extends State<_RecoveryPlanDialog> {
     });
   }
 
-  Future<void> _chooseDeadline() async {
-    final now = DateTime.now();
-    final picked = await showAppDatePicker(
-      context,
-      initialDate: parseDate(_deadline) ?? now.add(const Duration(days: 14)),
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-      title: '计划完成日期',
-      confirmLabel: '确定日期',
-    );
-    if (picked != null) setState(() => _deadline = formatDate(picked));
-  }
-
   void _submit() {
     final detail = _detail.text.trim();
     final target = double.tryParse(_targetPrice.text.replaceAll(',', ''));
@@ -662,7 +647,7 @@ class _RecoveryPlanDialogState extends State<_RecoveryPlanDialog> {
       _RecoveryPlanResult(
         method: _method,
         targetPrice: _cashMethod ? target! : 0,
-        deadline: _deadline,
+        deadline: widget.item.recoveryDeadline,
         platform: _cashMethod ? detail : '',
         contact: _method == '转赠' ? detail : '',
         note: _note.text.trim(),
@@ -672,80 +657,70 @@ class _RecoveryPlanDialogState extends State<_RecoveryPlanDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.item.hasRecoveryPlan ? '调整回血计划' : '制定回血计划'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      content: SizedBox(
-        width: 340,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              BottomSelectField<String>(
-                label: '处理方式',
-                value: _method,
-                options: const [
-                  BottomSelectOption(value: '转卖', label: '转卖'),
-                  BottomSelectOption(value: '回收', label: '回收'),
-                  BottomSelectOption(value: '转赠', label: '转赠'),
-                  BottomSelectOption(value: '丢弃', label: '丢弃'),
-                ],
-                onChanged: (value) {
-                  if (value != null) _selectMethod(value);
-                },
-              ),
-              if (_cashMethod) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _targetPrice,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: '目标回血金额',
-                    prefixText: '${widget.item.currencySymbol} ',
-                  ),
-                ),
-              ],
-              if (_method != '丢弃') ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _detail,
-                  decoration: InputDecoration(
-                    labelText: _method == '转赠' ? '接收人' : '计划平台',
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: _chooseDeadline,
-                borderRadius: BorderRadius.circular(16),
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: '计划完成日期'),
-                  child: Text(_deadline),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _note,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: '计划备注（选填）',
-                  alignLabelWithHint: true,
-                ),
-              ),
+    return _RecoverySheetFrame(
+      title: widget.item.hasRecoveryPlan ? '调整回血计划' : '制定回血计划',
+      subtitle: widget.item.name,
+      content: Column(
+        children: [
+          BottomSelectField<String>(
+            label: '处理方式',
+            value: _method,
+            options: const [
+              BottomSelectOption(value: '转卖', label: '转卖'),
+              BottomSelectOption(value: '回收', label: '回收'),
+              BottomSelectOption(value: '转赠', label: '转赠'),
+              BottomSelectOption(value: '丢弃', label: '丢弃'),
             ],
+            onChanged: (value) {
+              if (value != null) _selectMethod(value);
+            },
           ),
-        ),
+          if (_cashMethod) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _targetPrice,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: '目标回血金额',
+                prefixText: '${widget.item.currencySymbol} ',
+              ),
+            ),
+          ],
+          if (_method != '丢弃') ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _detail,
+              decoration: InputDecoration(
+                labelText: _method == '转赠' ? '接收人' : '计划平台',
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _note,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: '计划备注（选填）',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('取消'),
+          ),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(widget.item.hasRecoveryPlan ? '保存计划' : '创建计划'),
+        const SizedBox(width: 10),
+        Expanded(
+          child: FilledButton(
+            onPressed: _submit,
+            child: Text(widget.item.hasRecoveryPlan ? '保存计划' : '创建计划'),
+          ),
         ),
       ],
     );
@@ -772,7 +747,6 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
           : widget.item.currentTotal * 0.7,
     ),
   );
-  final _cost = TextEditingController(text: '0');
   late final TextEditingController _detail = TextEditingController(
     text: widget.item.recoveryPlatform.isNotEmpty
         ? widget.item.recoveryPlatform
@@ -784,7 +758,6 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
   @override
   void dispose() {
     _price.dispose();
-    _cost.dispose();
     _detail.dispose();
     super.dispose();
   }
@@ -795,14 +768,12 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
       _detail.clear();
       if (method != '转卖' && method != '回收') {
         _price.text = '0';
-        _cost.text = '0';
       }
     });
   }
 
   double get _priceValue =>
       double.tryParse(_price.text.replaceAll(',', '')) ?? 0;
-  double get _costValue => double.tryParse(_cost.text.replaceAll(',', '')) ?? 0;
 
   void _submit() {
     final detail = _detail.text.trim();
@@ -822,7 +793,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
         contact: _method == '转赠' ? detail : '',
         detail: detail,
         price: _cashMethod ? _priceValue : 0,
-        cost: _cashMethod ? _costValue.clamp(0, double.infinity) : 0,
+        cost: 0,
         processDate: formatDate(DateTime.now()),
       ),
     );
@@ -830,86 +801,280 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final net = (_priceValue - _costValue).clamp(0, double.infinity);
-    return AlertDialog(
-      title: const Text('完成闲置处理'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      content: SizedBox(
-        width: 340,
-        child: SingleChildScrollView(
+    return _RecoverySheetFrame(
+      title: '完成闲置处理',
+      subtitle: widget.item.name,
+      content: Column(
+        children: [
+          BottomSelectField<String>(
+            label: '处理方式',
+            value: _method,
+            options: const [
+              BottomSelectOption(value: '转卖', label: '转卖'),
+              BottomSelectOption(value: '回收', label: '回收'),
+              BottomSelectOption(value: '转赠', label: '转赠'),
+              BottomSelectOption(value: '丢弃', label: '丢弃'),
+            ],
+            onChanged: (value) {
+              if (value != null) _selectMethod(value);
+            },
+          ),
+          if (_cashMethod) ...[
+            const SizedBox(height: 12),
+            _RecoveryAmountComparison(
+              item: widget.item,
+              priceController: _price,
+              onChanged: () => setState(() {}),
+            ),
+          ],
+          if (_method != '丢弃') ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _detail,
+              decoration: InputDecoration(
+                labelText: _method == '转赠' ? '接收人' : '平台名称',
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('取消'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: FilledButton(onPressed: _submit, child: Text('保存')),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecoverySheetFrame extends StatelessWidget {
+  const _RecoverySheetFrame({
+    required this.title,
+    required this.subtitle,
+    required this.content,
+    required this.actions,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget content;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final keyboardInset = media.viewInsets.bottom;
+    final maxHeight = math.min(
+      700.0,
+      media.size.height - keyboardInset - media.padding.top - 24,
+    );
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: math.max(320, maxHeight)),
+        decoration: BoxDecoration(
+          color: context.appSurfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              BottomSelectField<String>(
-                label: '处理方式',
-                value: _method,
-                options: const [
-                  BottomSelectOption(value: '转卖', label: '转卖'),
-                  BottomSelectOption(value: '回收', label: '回收'),
-                  BottomSelectOption(value: '转赠', label: '转赠'),
-                  BottomSelectOption(value: '丢弃', label: '丢弃'),
-                ],
-                onChanged: (value) {
-                  if (value != null) _selectMethod(value);
-                },
-              ),
-              if (_cashMethod) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _price,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    labelText: '成交金额',
-                    prefixText: '${widget.item.currencySymbol} ',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _cost,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    labelText: '运费、手续费等成本',
-                    prefixText: '${widget.item.currencySymbol} ',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '净回血 ${widget.item.currencySymbol}${formatMoney(net)}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 12, 12),
+                child: Column(
+                  children: [
+                    const BottomSheetHandle(width: 40, height: 4),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  fontFamily: 'Songti SC',
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              ItemNameText(
+                                name: subtitle,
+                                style: TextStyle(
+                                  color: context.appMutedColor,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.pop(context),
+                          icon: Icon(Icons.close_rounded),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ),
-              ],
-              if (_method != '丢弃') ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _detail,
-                  decoration: InputDecoration(
-                    labelText: _method == '转赠' ? '接收人' : '平台名称',
-                  ),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                  child: content,
                 ),
-              ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
+                child: Row(children: actions),
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+    );
+  }
+}
+
+class _RecoveryAmountComparison extends StatelessWidget {
+  const _RecoveryAmountComparison({
+    required this.item,
+    required this.priceController,
+    required this.onChanged,
+  });
+
+  final InventoryItem item;
+  final TextEditingController priceController;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final net = double.tryParse(priceController.text.replaceAll(',', '')) ?? 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 13),
+      decoration: BoxDecoration(
+        color: Color.lerp(primary, context.appSurfaceColor, 0.93),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: primary.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '成交对比',
+            style: TextStyle(
+              color: context.appMutedColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: _RecoveryAmountValue(
+                  label: '购入价格',
+                  value:
+                      '${item.currencySymbol}${formatMoney(item.purchasePrice)}',
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 44,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: primary.withValues(alpha: 0.12),
+              ),
+              Expanded(
+                flex: 6,
+                child: TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.right,
+                  onChanged: (_) => onChanged(),
+                  decoration: InputDecoration(
+                    labelText: '成交价格',
+                    prefixText: '${item.currencySymbol} ',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 44,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: primary.withValues(alpha: 0.12),
+              ),
+              Expanded(
+                child: _RecoveryAmountValue(
+                  label: '净回血',
+                  value: '${item.currencySymbol}${formatMoney(net)}',
+                  emphasized: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecoveryAmountValue extends StatelessWidget {
+  const _RecoveryAmountValue({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: context.appMutedColor, fontSize: 9),
         ),
-        FilledButton(onPressed: _submit, child: const Text('完成处理')),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: emphasized ? primary : context.appTextColor,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ],
     );
   }

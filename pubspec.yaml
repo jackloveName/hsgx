@@ -68,8 +68,20 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - static/image/app-icon-192.png
-    - static/image/items/
+    - static/image/app-icon-192.webp
+    - static/image/daily-scene-backdrop.webp
+    - static/image/items/appliances.webp
+    - static/image/items/beauty.webp
+    - static/image/items/book.webp
+    - static/image/items/car.webp
+    - static/image/items/card.webp
+    - static/image/items/clothing.webp
+    - static/image/items/collect.webp
+    - static/image/items/digital.webp
+    - static/image/items/furniture.webp
+    - static/image/items/other.webp
+    - static/image/items/sports.webp
+    - static/image/items/virtual.webp
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

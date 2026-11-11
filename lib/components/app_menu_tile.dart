@@ -73,7 +73,7 @@ class AppMenuTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Color(0xFF918C83),
                       fontSize: 10,
                       height: 1.4,
@@ -91,12 +91,12 @@ class AppMenuTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.right,
-                style: const TextStyle(color: Color(0xFF918C83), fontSize: 11),
+                style: TextStyle(color: Color(0xFF918C83), fontSize: 11),
               ),
             ),
           if (showChevron) ...[
             const SizedBox(width: 5),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 20,
               color: Color(0xFFB9B4AC),

@@ -119,7 +119,7 @@ class _ItemImageCarouselState extends State<ItemImageCarousel> {
                   child: Text(
                     '${_index + 1} / ${images.length}',
                     key: const Key('item-gallery-indicator'),
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                    style: TextStyle(color: Colors.white, fontSize: 10),
                   ),
                 ),
               ),
@@ -156,7 +156,7 @@ class _ItemImageCarouselState extends State<ItemImageCarousel> {
               top: MediaQuery.paddingOf(context).top + 10,
               child: IconButton.filledTonal(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+                icon: Icon(Icons.close_rounded),
               ),
             ),
           ],

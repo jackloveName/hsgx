@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../app_store.dart';
+import '../components/item_name_text.dart';
+import '../components/item_relation_row.dart';
+import '../components/item_summary_card.dart';
 import '../models.dart';
 import '../widgets.dart';
-import 'item_detail_screen.dart';
 
 class ItemRelationsScreen extends StatefulWidget {
-  const ItemRelationsScreen({super.key, required this.itemId});
+  const ItemRelationsScreen({super.key, required this.itemId, this.store});
 
   final String itemId;
+  final AppStore? store;
 
   @override
   State<ItemRelationsScreen> createState() => _ItemRelationsScreenState();
@@ -18,19 +21,20 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
   late Set<String> _selected;
   bool _saving = false;
 
+  AppStore get _store => widget.store ?? AppStore.instance;
+
   @override
   void initState() {
     super.initState();
-    _selected =
-        AppStore.instance.itemById(widget.itemId)?.relatedItemIds.toSet() ?? {};
+    _selected = _store.itemById(widget.itemId)?.relatedItemIds.toSet() ?? {};
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: AppStore.instance,
+      animation: _store,
       builder: (context, _) {
-        final store = AppStore.instance;
+        final store = _store;
         final item = store.itemById(widget.itemId);
         if (item == null) {
           return PageFrame(
@@ -62,7 +66,7 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
         final usageDaily = [
           item,
           ...selectedCostItems,
-        ].fold<double>(0, (sum, entry) => sum + entry.usageDailyCost);
+        ].fold<double>(0, (sum, entry) => sum + entry.usageAverageCost);
         final ownedDaily = [
           item,
           ...selectedCostItems,
@@ -76,7 +80,7 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'COMBINATION',
                       style: TextStyle(
                         color: Colors.white70,
@@ -88,14 +92,14 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
                     const SizedBox(height: 8),
                     Text(
                       item.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 7),
-                    const Text(
+                    Text(
                       '把一起使用的物品关联起来，查看组合后的真实使用成本。',
                       style: TextStyle(
                         color: Colors.white70,
@@ -142,27 +146,27 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
                   icon: Icons.hub_outlined,
                 )
               else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final related in selectedItems)
-                      InputChip(
-                        avatar: const Icon(
-                          Icons.inventory_2_outlined,
-                          size: 15,
+                SoftCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  child: Column(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < selectedItems.length;
+                        index++
+                      ) ...[
+                        ItemRelationRow(
+                          key: Key('related-item-${selectedItems[index].id}'),
+                          item: selectedItems[index],
                         ),
-                        label: Text(related.name),
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) =>
-                                ItemDetailScreen(itemId: related.id),
-                          ),
-                        ),
-                        onDeleted: () =>
-                            setState(() => _selected.remove(related.id)),
-                      ),
-                  ],
+                        if (index < selectedItems.length - 1)
+                          const ContentDivider(),
+                      ],
+                    ],
+                  ),
                 ),
               const SectionHeading(title: '可选择物品'),
               if (candidates.isEmpty)
@@ -198,19 +202,14 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
                           },
                         ),
                         if (index < candidates.length - 1)
-                          const Divider(
-                            height: 1,
-                            indent: 58,
-                            color: Color(0xFFF1EDE7),
-                          ),
+                          const ContentDivider(indent: 58),
                       ],
                     ],
                   ),
                 ),
               const SizedBox(height: 24),
               PrimaryButton(
-                label: _saving ? '保存中…' : '保存关联关系',
-                icon: Icons.link_rounded,
+                label: _saving ? '保存中…' : '保存',
                 onPressed: _saving ? null : _save,
               ),
             ],
@@ -223,7 +222,7 @@ class _ItemRelationsScreenState extends State<ItemRelationsScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await AppStore.instance.setRelatedItems(widget.itemId, _selected);
+      await _store.setRelatedItems(widget.itemId, _selected);
       if (!mounted) return;
       Navigator.maybePop(context);
       showAppSnack(context, '关联关系已更新');
@@ -250,21 +249,37 @@ class _RelationCandidate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CheckboxListTile(
-      value: selected,
-      onChanged: (value) => onChanged(value == true),
-      controlAffinity: ListTileControlAffinity.trailing,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      secondary: ItemVisual(item: item, size: 42, radius: 12),
-      title: Text(
-        item.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        '${item.categoryInfo.name} · ${item.statusInfo.name}',
-        style: const TextStyle(color: appMuted, fontSize: 10),
+    return Padding(
+      key: Key('relation-candidate-${item.id}'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                StatusPill(status: item.statusInfo, compact: true),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: ItemNameText(
+                    name: item.name,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 78,
+            child: ItemUsageCost(item: item, alignment: Alignment.centerRight),
+          ),
+          Checkbox(
+            value: selected,
+            onChanged: (value) => onChanged(value == true),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ],
       ),
     );
   }

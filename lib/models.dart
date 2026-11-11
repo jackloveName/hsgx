@@ -3,15 +3,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-const appBackground = Color(0xFFFCFAF7);
+const appBackground = Color(0xFFF6F2EB);
 const appSurface = Color(0xFFFFFFFF);
-const appPrimary = Color(0xFF3A9D8A);
-const appText = Color(0xFF30312D);
-const appMuted = Color(0xFF918C83);
-const appBorder = Color(0xFFE9E3DA);
-const appPink = Color(0xFFE7849A);
-const appAmber = Color(0xFFE4B15C);
-const appBlue = Color(0xFF6C9FE8);
+const appPrimary = Color(0xFF315F57);
+const appText = Color(0xFF272A26);
+const appMuted = Color(0xFF7F817A);
+const appBorder = Color(0xFFE4DED4);
+const appPink = Color(0xFFB56D78);
+const appAmber = Color(0xFFA77F4E);
+const appBlue = Color(0xFF647B91);
 const aggregateCurrencyCode = 'CNY';
 const activeItemStatuses = {'inuse', 'idle', 'repairing'};
 
@@ -20,163 +20,130 @@ class AppSkin {
     required this.id,
     required this.name,
     required this.description,
+    required this.brightness,
     required this.background,
+    required this.surface,
+    required this.surfaceMuted,
     required this.primary,
+    required this.onPrimary,
     required this.primarySoft,
     required this.accent,
+    required this.accentSoft,
     required this.text,
     required this.muted,
+    required this.placeholder,
+    required this.border,
     required this.heroStart,
     required this.heroEnd,
+    required this.heroAccent,
   });
 
   final String id;
   final String name;
   final String description;
+  final Brightness brightness;
   final Color background;
+  final Color surface;
+  final Color surfaceMuted;
   final Color primary;
+  final Color onPrimary;
   final Color primarySoft;
   final Color accent;
+  final Color accentSoft;
   final Color text;
   final Color muted;
+  final Color placeholder;
+  final Color border;
   final Color heroStart;
   final Color heroEnd;
+  final Color heroAccent;
 }
 
 const appSkins = <AppSkin>[
   AppSkin(
     id: 'camellia',
-    name: '山茶暖白',
-    description: '温润米白与清透青绿，保留花拾归匣原本的收藏感。',
-    background: Color(0xFFFCFAF7),
-    primary: Color(0xFF3A9D8A),
-    primarySoft: Color(0xFFE7F6F1),
-    accent: Color(0xFFD97A90),
-    text: Color(0xFF302F2C),
-    muted: Color(0xFF969189),
-    heroStart: Color(0xFF62CDB5),
-    heroEnd: Color(0xFF6C9FE8),
+    name: '归青',
+    description: '暖米纸色、墨青瓷与旧黄铜，像把物品轻轻收回匣中。',
+    brightness: Brightness.light,
+    background: Color(0xFFF4F0E8),
+    surface: Color(0xFFFCFAF5),
+    surfaceMuted: Color(0xFFECE7DE),
+    primary: Color(0xFF315F57),
+    onPrimary: Colors.white,
+    primarySoft: Color(0xFFE6EFEB),
+    accent: Color(0xFFB08A5A),
+    accentSoft: Color(0xFFF1E5D2),
+    text: Color(0xFF272A26),
+    muted: Color(0xFF6F756E),
+    placeholder: Color(0xFFA8ABA3),
+    border: Color(0xFFDED7CB),
+    heroStart: Color(0xFF263F39),
+    heroEnd: Color(0xFF596F67),
+    heroAccent: Color(0xFFD8BD86),
   ),
   AppSkin(
-    id: 'mist',
-    name: '晨雾蓝',
-    description: '清冷蓝调搭配雾白底色，适合更安静理性的使用氛围。',
-    background: Color(0xFFF6FAFF),
-    primary: Color(0xFF5B8FE3),
-    primarySoft: Color(0xFFEAF1FC),
-    accent: Color(0xFF43AFC6),
-    text: Color(0xFF29313D),
-    muted: Color(0xFF8B97A8),
-    heroStart: Color(0xFF78B7F2),
-    heroEnd: Color(0xFF70CDBE),
+    id: 'blossom',
+    name: '花笺',
+    description: '低饱和海棠灰红、胭脂纸与旧铜，保留花笺般的温柔手感。',
+    brightness: Brightness.light,
+    background: Color(0xFFF8F1EF),
+    surface: Color(0xFFFEFBFA),
+    surfaceMuted: Color(0xFFF3E7E6),
+    primary: Color(0xFF8D5D66),
+    onPrimary: Colors.white,
+    primarySoft: Color(0xFFF1E2E5),
+    accent: Color(0xFFB27F63),
+    accentSoft: Color(0xFFF2E5DB),
+    text: Color(0xFF34272A),
+    muted: Color(0xFF806E72),
+    placeholder: Color(0xFFB5A5A9),
+    border: Color(0xFFE7D7D9),
+    heroStart: Color(0xFF71474F),
+    heroEnd: Color(0xFFB17A7C),
+    heroAccent: Color(0xFFF2D8CC),
   ),
   AppSkin(
-    id: 'rose',
-    name: '山茶粉',
-    description: '柔和粉色与暖金点缀，轻盈、明亮，带一点浪漫气息。',
-    background: Color(0xFFFFF8FA),
-    primary: Color(0xFFD46A8A),
-    primarySoft: Color(0xFFFCEAF0),
-    accent: Color(0xFFE0A05F),
-    text: Color(0xFF3B2E32),
-    muted: Color(0xFFA18A91),
-    heroStart: Color(0xFFE98BAB),
-    heroEnd: Color(0xFFF0B46E),
-  ),
-  AppSkin(
-    id: 'pine',
-    name: '松间绿',
-    description: '沉稳松绿配自然浅底，更接近安静整理和长期记录的感觉。',
-    background: Color(0xFFF5FBF8),
-    primary: Color(0xFF4E9A7A),
-    primarySoft: Color(0xFFE6F4EC),
-    accent: Color(0xFFC9A95E),
-    text: Color(0xFF29352F),
-    muted: Color(0xFF87978F),
-    heroStart: Color(0xFF68B59C),
-    heroEnd: Color(0xFF78B3A8),
-  ),
-  AppSkin(
-    id: 'lilac',
-    name: '藕荷紫',
-    description: '低饱和藕荷色与灰粉搭配，安静柔和，适合喜欢细腻氛围的用户。',
-    background: Color(0xFFFAF8FF),
-    primary: Color(0xFF7C6AB4),
-    primarySoft: Color(0xFFEFEBFA),
-    accent: Color(0xFFD8899B),
-    text: Color(0xFF302C3D),
-    muted: Color(0xFF918A9F),
-    heroStart: Color(0xFF9A87D5),
-    heroEnd: Color(0xFF7CB8C9),
-  ),
-  AppSkin(
-    id: 'ocean',
-    name: '海盐青',
-    description: '清爽海盐青搭配浅蓝底色，明亮干净，适合轻快的工作节奏。',
-    background: Color(0xFFF4FBFC),
-    primary: Color(0xFF278E9B),
-    primarySoft: Color(0xFFE1F4F5),
-    accent: Color(0xFFE0A55C),
-    text: Color(0xFF26383B),
-    muted: Color(0xFF82999D),
-    heroStart: Color(0xFF58B9BF),
-    heroEnd: Color(0xFF6EA8D9),
-  ),
-  AppSkin(
-    id: 'amber',
-    name: '琥珀暖阳',
-    description: '温暖琥珀色与珊瑚红组合，适合喜欢明亮、有生活温度的主题。',
-    background: Color(0xFFFFF9F2),
-    primary: Color(0xFFC77D38),
-    primarySoft: Color(0xFFF9EEDC),
-    accent: Color(0xFFD8546B),
-    text: Color(0xFF3D3129),
-    muted: Color(0xFFA18D7D),
-    heroStart: Color(0xFFE8AD5C),
-    heroEnd: Color(0xFFDF7C6D),
-  ),
-  AppSkin(
-    id: 'graphite',
-    name: '墨石灰',
-    description: '沉稳灰蓝与暖金属色点缀，视觉更克制，适合偏理性的信息浏览。',
-    background: Color(0xFFF7F8F9),
-    primary: Color(0xFF596A70),
-    primarySoft: Color(0xFFE8EEF0),
-    accent: Color(0xFFB38B55),
-    text: Color(0xFF293035),
-    muted: Color(0xFF899197),
-    heroStart: Color(0xFF71848A),
-    heroEnd: Color(0xFF93A7A2),
-  ),
-  AppSkin(
-    id: 'peach',
-    name: '蜜桃奶油',
-    description: '柔和蜜桃色与奶油底搭配，轻盈温暖，适合更柔和的日常记录。',
-    background: Color(0xFFFFF8F4),
-    primary: Color(0xFFD77A66),
-    primarySoft: Color(0xFFFCEAE3),
-    accent: Color(0xFFE2A65B),
-    text: Color(0xFF3D2E2A),
-    muted: Color(0xFFA18B83),
-    heroStart: Color(0xFFF0A27E),
-    heroEnd: Color(0xFFE7B86E),
-  ),
-  AppSkin(
-    id: 'bamboo',
-    name: '竹影墨绿',
-    description: '深竹绿与自然棕点缀，沉静耐看，适合长期记录和整理。',
-    background: Color(0xFFF5F8F5),
-    primary: Color(0xFF426B57),
-    primarySoft: Color(0xFFE5EFE9),
-    accent: Color(0xFFA47B47),
-    text: Color(0xFF29342E),
-    muted: Color(0xFF839087),
-    heroStart: Color(0xFF5F8E72),
-    heroEnd: Color(0xFF7EA68E),
+    id: 'night',
+    name: '夜匣',
+    description: '烟墨、乌木与暖黄铜，像一只只在夜晚打开的私人收藏匣。',
+    brightness: Brightness.dark,
+    background: Color(0xFF171B19),
+    surface: Color(0xFF222825),
+    surfaceMuted: Color(0xFF2B322E),
+    primary: Color(0xFFC1A36C),
+    onPrimary: Color(0xFF231F17),
+    primarySoft: Color(0xFF383329),
+    accent: Color(0xFF8FA99A),
+    accentSoft: Color(0xFF293630),
+    text: Color(0xFFF1EDE4),
+    muted: Color(0xFFA7A79E),
+    placeholder: Color(0xFF777D75),
+    border: Color(0xFF3B423E),
+    heroStart: Color(0xFF141815),
+    heroEnd: Color(0xFF39443D),
+    heroAccent: Color(0xFFD8BB7E),
   ),
 ];
 
 AppSkin appSkinAt(int index) => appSkins[index % appSkins.length];
+
+extension AppThemeColorContext on BuildContext {
+  ColorScheme get appColorScheme => Theme.of(this).colorScheme;
+
+  Color get appSurfaceColor => appColorScheme.surfaceContainerLowest;
+
+  Color get appSurfaceMutedColor => appColorScheme.surfaceContainer;
+
+  Color get appTextColor => appColorScheme.onSurface;
+
+  Color get appMutedColor => appColorScheme.onSurfaceVariant;
+
+  Color get appPlaceholderColor =>
+      Theme.of(this).inputDecorationTheme.hintStyle?.color ??
+      appMutedColor.withValues(alpha: 0.5);
+
+  Color get appBorderColor => appColorScheme.outlineVariant;
+}
 
 class CurrencyOption {
   const CurrencyOption(this.code, this.symbol, this.name);
@@ -335,7 +302,7 @@ const itemCategories = <ItemCategory>[
     name: '数码产品',
     color: Color(0xFF5B8FE3),
     softColor: Color(0xFFEAF1FC),
-    asset: 'static/image/items/digital.png',
+    asset: 'static/image/items/digital.webp',
     subcategories: ['手机', '耳机', '电脑', '手表'],
   ),
   ItemCategory(
@@ -343,7 +310,7 @@ const itemCategories = <ItemCategory>[
     name: '服饰箱包',
     color: Color(0xFFC98C4E),
     softColor: Color(0xFFF8F0E3),
-    asset: 'static/image/items/clothing.png',
+    asset: 'static/image/items/clothing.webp',
     subcategories: ['上衣', '裤子', '袜子', '鞋子', '帽子', '箱包'],
   ),
   ItemCategory(
@@ -351,7 +318,7 @@ const itemCategories = <ItemCategory>[
     name: '家具',
     color: Color(0xFF4B9F91),
     softColor: Color(0xFFE7F5F2),
-    asset: 'static/image/items/furniture.png',
+    asset: 'static/image/items/furniture.webp',
     subcategories: ['灯具', '床品', '收纳'],
   ),
   ItemCategory(
@@ -359,7 +326,7 @@ const itemCategories = <ItemCategory>[
     name: '家电',
     color: Color(0xFFD5A13D),
     softColor: Color(0xFFFAF2DF),
-    asset: 'static/image/items/appliances.png',
+    asset: 'static/image/items/appliances.webp',
     subcategories: ['厨房电器', '清洁电器', '生活电器', '影音设备'],
   ),
   ItemCategory(
@@ -367,7 +334,7 @@ const itemCategories = <ItemCategory>[
     name: '教育图书',
     color: Color(0xFF786BC2),
     softColor: Color(0xFFEFEDFA),
-    asset: 'static/image/items/book.png',
+    asset: 'static/image/items/book.webp',
     subcategories: ['文学', '经管', '教材', '童书'],
   ),
   ItemCategory(
@@ -375,7 +342,7 @@ const itemCategories = <ItemCategory>[
     name: '运动',
     color: Color(0xFF52A96F),
     softColor: Color(0xFFE9F6EE),
-    asset: 'static/image/items/sports.png',
+    asset: 'static/image/items/sports.webp',
     subcategories: ['健身器材', '球类', '户外装备'],
   ),
   ItemCategory(
@@ -383,7 +350,7 @@ const itemCategories = <ItemCategory>[
     name: '美妆个护',
     color: Color(0xFFD77FA5),
     softColor: Color(0xFFFAEDF3),
-    asset: 'static/image/items/beauty.png',
+    asset: 'static/image/items/beauty.webp',
     subcategories: ['护肤品', '彩妆品', '香氛', '美容工具'],
   ),
   ItemCategory(
@@ -391,7 +358,7 @@ const itemCategories = <ItemCategory>[
     name: '车辆',
     color: Color(0xFF557C9B),
     softColor: Color(0xFFEAF0F5),
-    asset: 'static/image/items/car.png',
+    asset: 'static/image/items/car.webp',
     subcategories: ['小轿车', '电瓶车', '自行车'],
   ),
   ItemCategory(
@@ -399,7 +366,7 @@ const itemCategories = <ItemCategory>[
     name: '证卡证件',
     color: Color(0xFF8B5F84),
     softColor: Color(0xFFF5ECF4),
-    asset: 'static/image/items/card.png',
+    asset: 'static/image/items/card.webp',
     subcategories: ['身份证', '银行卡', '驾照', '护照'],
   ),
   ItemCategory(
@@ -407,7 +374,7 @@ const itemCategories = <ItemCategory>[
     name: '虚拟资产',
     color: Color(0xFF13899A),
     softColor: Color(0xFFE5F5F8),
-    asset: 'static/image/items/virtual.png',
+    asset: 'static/image/items/virtual.webp',
     subcategories: ['App会员', '视频会员', '音乐会员'],
   ),
   ItemCategory(
@@ -415,7 +382,7 @@ const itemCategories = <ItemCategory>[
     name: '收藏爱好',
     color: Color(0xFFB96A63),
     softColor: Color(0xFFF7EAE7),
-    asset: 'static/image/items/collect.png',
+    asset: 'static/image/items/collect.webp',
     subcategories: ['手办', '卡牌', '艺术品'],
   ),
   ItemCategory(
@@ -423,7 +390,7 @@ const itemCategories = <ItemCategory>[
     name: '其他',
     color: Color(0xFF8C879A),
     softColor: Color(0xFFF1EFF4),
-    asset: 'static/image/items/other.png',
+    asset: 'static/image/items/other.webp',
     subcategories: ['日常用品', '药品', '宠物用品', '保养', '保险'],
   ),
 ];
@@ -445,11 +412,11 @@ class ItemStatus {
 }
 
 const itemStatuses = <ItemStatus>[
-  ItemStatus('inuse', '使用中', Color(0xFF4DA88F), Color(0xFFE7F6F1)),
-  ItemStatus('idle', '闲置', Color(0xFFC58B2B), Color(0xFFFBF3DF)),
-  ItemStatus('repairing', '维修中', Color(0xFFE88778), Color(0xFFFBEDEA)),
-  ItemStatus('processed', '已处理', Color(0xFF607FC7), Color(0xFFEDF2FB)),
-  ItemStatus('retired', '已退役', Color(0xFF8B78C9), Color(0xFFF2EFF9)),
+  ItemStatus('inuse', '使用中', Color(0xFF315F57), Color(0xFFE6EFEB)),
+  ItemStatus('idle', '闲置', Color(0xFF987446), Color(0xFFF3EBDD)),
+  ItemStatus('repairing', '维修中', Color(0xFFA8665C), Color(0xFFF3E8E5)),
+  ItemStatus('processed', '已处理', Color(0xFF5D7085), Color(0xFFE8EDF1)),
+  ItemStatus('retired', '已退役', Color(0xFF766988), Color(0xFFECE8F1)),
 ];
 
 ItemStatus statusById(String id) {
@@ -498,12 +465,14 @@ class InventoryItem {
     this.storageLocation = '',
     this.warrantyPeriod = '',
     this.warrantyEndDate = '',
-    this.targetUseDays = 0,
+    this.targetUsageValue = 0,
+    this.targetUsageUnit = 'day',
     this.note = '',
     this.tags = const [],
     this.usageRecords = const [],
     this.statusHistory = const [],
     this.favorite = false,
+    this.favoriteAt = '',
     List<String>? imagePaths,
     String imagePath = '',
     this.relatedItemIds = const [],
@@ -550,12 +519,14 @@ class InventoryItem {
   final String storageLocation;
   final String warrantyPeriod;
   final String warrantyEndDate;
-  final int targetUseDays;
+  final int targetUsageValue;
+  final String targetUsageUnit;
   final String note;
   final List<String> tags;
   final List<String> usageRecords;
   final List<StatusEvent> statusHistory;
   final bool favorite;
+  final String favoriteAt;
   final List<String> imagePaths;
   final List<String> relatedItemIds;
   final String idleReason;
@@ -596,6 +567,8 @@ class InventoryItem {
 
   DateTime get purchaseDateTime =>
       parseDate(purchaseDate) ?? parseDate(createdAt) ?? DateTime.now();
+  DateTime get favoriteDateTime =>
+      parseDate(favoriteAt) ?? parseDate(createdAt) ?? DateTime.now();
 
   DateTime? get ownedStopDate {
     if (status == 'processed') {
@@ -729,9 +702,19 @@ class InventoryItem {
     return end.isBefore(start) ? 0 : end.difference(start).inDays + 1;
   }
 
+  int retiredDaysAsOf(DateTime now) {
+    if (status != 'retired') return 0;
+    final start = _latestStatusDate(const {'retired'});
+    if (start == null) return 0;
+    final end = _startOfDay(now);
+    return end.isBefore(start) ? 0 : end.difference(start).inDays + 1;
+  }
+
   int get ownedDays => ownedDaysAsOf(DateTime.now());
   int get usageDays => usageDaysAsOf(DateTime.now());
   int get idleDays => idleDaysAsOf(DateTime.now());
+  int get retiredDays => retiredDaysAsOf(DateTime.now());
+  bool get canRecordManualUsage => status == 'inuse' && usageMode == 'manual';
 
   int usageDaysInLastDays(int days, {DateTime? now}) {
     final end = _startOfDay(now ?? DateTime.now());
@@ -769,8 +752,11 @@ class InventoryItem {
 
   DateTime? get lastUsedAt => lastUsedAtAsOf(DateTime.now());
 
-  int get effectiveTargetDays {
-    if (targetUseDays > 0) return targetUseDays;
+  String get targetUsageUnitLabel => targetUsageUnit == 'count' ? '次' : '天';
+
+  int get effectiveTargetValue {
+    if (targetUsageValue > 0) return targetUsageValue;
+    if (usageMode == 'manual') return 0;
     return switch (warrantyPeriod) {
       '一年' => 365,
       '二年' || '两年' => 730,
@@ -781,9 +767,9 @@ class InventoryItem {
   }
 
   double get ownedDailyCost => ownedDays == 0 ? 0 : purchaseTotal / ownedDays;
-  double get usageDailyCost => usageDays == 0 ? 0 : purchaseTotal / usageDays;
-  double get targetDailyCost =>
-      effectiveTargetDays == 0 ? 0 : purchaseTotal / effectiveTargetDays;
+  double get usageAverageCost => usageDays == 0 ? 0 : purchaseTotal / usageDays;
+  double get targetAverageCost =>
+      effectiveTargetValue == 0 ? 0 : purchaseTotal / effectiveTargetValue;
 
   DateTime? get warrantyEnd {
     final explicit = parseDate(warrantyEndDate);
@@ -817,12 +803,14 @@ class InventoryItem {
     String? storageLocation,
     String? warrantyPeriod,
     String? warrantyEndDate,
-    int? targetUseDays,
+    int? targetUsageValue,
+    String? targetUsageUnit,
     String? note,
     List<String>? tags,
     List<String>? usageRecords,
     List<StatusEvent>? statusHistory,
     bool? favorite,
+    String? favoriteAt,
     List<String>? imagePaths,
     String? imagePath,
     List<String>? relatedItemIds,
@@ -865,12 +853,14 @@ class InventoryItem {
       storageLocation: storageLocation ?? this.storageLocation,
       warrantyPeriod: warrantyPeriod ?? this.warrantyPeriod,
       warrantyEndDate: warrantyEndDate ?? this.warrantyEndDate,
-      targetUseDays: targetUseDays ?? this.targetUseDays,
+      targetUsageValue: targetUsageValue ?? this.targetUsageValue,
+      targetUsageUnit: targetUsageUnit ?? this.targetUsageUnit,
       note: note ?? this.note,
       tags: tags ?? this.tags,
       usageRecords: usageRecords ?? this.usageRecords,
       statusHistory: statusHistory ?? this.statusHistory,
       favorite: favorite ?? this.favorite,
+      favoriteAt: favoriteAt ?? this.favoriteAt,
       imagePaths:
           imagePaths ?? (imagePath == null ? this.imagePaths : [imagePath]),
       relatedItemIds: relatedItemIds ?? this.relatedItemIds,
@@ -916,12 +906,16 @@ class InventoryItem {
     'storageLocation': storageLocation,
     'warrantyPeriod': warrantyPeriod,
     'warrantyEndDate': warrantyEndDate,
-    'targetUseDays': targetUseDays,
+    'targetUsageValue': targetUsageValue,
+    'targetUsageUnit': targetUsageUnit,
+    // Keep the legacy field for older clients while the schema transition completes.
+    'targetUseDays': targetUsageUnit == 'day' ? targetUsageValue : 0,
     'note': note,
     'tags': tags,
     'usageRecords': usageRecords,
     'statusHistory': statusHistory.map((entry) => entry.toJson()).toList(),
     'favorite': favorite,
+    'favoriteAt': favoriteAt,
     'imagePath': imagePath,
     'image': imagePath,
     'images': imagePaths,
@@ -1039,7 +1033,15 @@ class InventoryItem {
       storageLocation: json['storageLocation']?.toString() ?? '',
       warrantyPeriod: json['warrantyPeriod']?.toString() ?? '',
       warrantyEndDate: json['warrantyEndDate']?.toString() ?? '',
-      targetUseDays: _asInt(json['targetUseDays']),
+      targetUsageValue: _asInt(
+        json['targetUsageValue'] ?? json['targetUseDays'],
+      ),
+      targetUsageUnit:
+          json['targetUsageUnit']?.toString() == 'count' ||
+              (json['targetUsageUnit'] == null &&
+                  json['usageMode']?.toString() == 'manual')
+          ? 'count'
+          : 'day',
       note: json['note']?.toString() ?? '',
       tags: (json['tags'] as List? ?? const [])
           .map((tag) => tag.toString())
@@ -1049,6 +1051,7 @@ class InventoryItem {
           .toList(),
       statusHistory: history,
       favorite: json['favorite'] == true,
+      favoriteAt: json['favoriteAt']?.toString() ?? '',
       imagePaths: images,
       relatedItemIds: related.toSet().toList(),
       idleReason: (json['idleReason'] ?? idleInfo['reason'] ?? '').toString(),
@@ -1097,6 +1100,7 @@ class WishEntry {
     required this.createdAt,
     this.status = 'cooling',
     this.desireType = '',
+    this.achievedAt = '',
   });
 
   final String id;
@@ -1108,15 +1112,15 @@ class WishEntry {
   final String createdAt;
   final String status;
   final String desireType;
+  final String achievedAt;
 
   DateTime get createdAtDate => DateTime.tryParse(createdAt) ?? DateTime.now();
+  DateTime? get achievedAtDate => DateTime.tryParse(achievedAt);
   DateTime get decisionDue => createdAtDate.add(Duration(days: coolingDays));
   int get remainingDays =>
       math.max(0, decisionDue.difference(DateTime.now()).inDays + 1);
-  int get elapsedDays => math.min(
-    coolingDays,
-    math.max(0, DateTime.now().difference(createdAtDate).inDays),
-  );
+  int get elapsedDays =>
+      math.max(0, DateTime.now().difference(createdAtDate).inDays);
   ItemCategory get categoryInfo => categoryById(category);
 
   WishEntry copyWith({
@@ -1129,6 +1133,7 @@ class WishEntry {
     String? createdAt,
     String? status,
     String? desireType,
+    String? achievedAt,
   }) => WishEntry(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1139,6 +1144,7 @@ class WishEntry {
     createdAt: createdAt ?? this.createdAt,
     status: status ?? this.status,
     desireType: desireType ?? this.desireType,
+    achievedAt: achievedAt ?? this.achievedAt,
   );
 
   Map<String, Object?> toJson() => {
@@ -1151,6 +1157,7 @@ class WishEntry {
     'createdAt': createdAt,
     'status': status,
     'desireType': desireType,
+    'achievedAt': achievedAt,
   };
 
   factory WishEntry.fromJson(Map<String, Object?> json) {
@@ -1167,6 +1174,7 @@ class WishEntry {
           json['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
       status: json['status']?.toString() ?? 'cooling',
       desireType: json['desireType']?.toString() ?? '',
+      achievedAt: json['achievedAt']?.toString() ?? '',
     );
   }
 }

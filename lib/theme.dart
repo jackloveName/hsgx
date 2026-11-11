@@ -7,11 +7,13 @@ import 'models.dart';
 class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   const AppThemeTokens({
     required this.softPrimary,
+    required this.heroAccent,
     required this.heroStart,
     required this.heroEnd,
   });
 
   final Color softPrimary;
+  final Color heroAccent;
   final Color heroStart;
   final Color heroEnd;
 
@@ -21,9 +23,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
         AppThemeTokens(
           softPrimary: Color.lerp(
             theme.colorScheme.primary,
-            Colors.white,
+            theme.colorScheme.surfaceContainerLowest,
             0.88,
           )!,
+          heroAccent: theme.colorScheme.secondary,
           heroStart: theme.colorScheme.primary,
           heroEnd: theme.colorScheme.secondary,
         );
@@ -32,11 +35,13 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
   @override
   AppThemeTokens copyWith({
     Color? softPrimary,
+    Color? heroAccent,
     Color? heroStart,
     Color? heroEnd,
   }) {
     return AppThemeTokens(
       softPrimary: softPrimary ?? this.softPrimary,
+      heroAccent: heroAccent ?? this.heroAccent,
       heroStart: heroStart ?? this.heroStart,
       heroEnd: heroEnd ?? this.heroEnd,
     );
@@ -50,6 +55,7 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     if (other is! AppThemeTokens) return this;
     return AppThemeTokens(
       softPrimary: Color.lerp(softPrimary, other.softPrimary, t)!,
+      heroAccent: Color.lerp(heroAccent, other.heroAccent, t)!,
       heroStart: Color.lerp(heroStart, other.heroStart, t)!,
       heroEnd: Color.lerp(heroEnd, other.heroEnd, t)!,
     );
@@ -59,65 +65,88 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
 ThemeData buildAppTheme([int skinIndex = 0]) {
   final skin = appSkinAt(skinIndex);
   final primary = skin.primary;
-  final scheme = ColorScheme.light(
+  final baseScheme = skin.brightness == Brightness.dark
+      ? ColorScheme.dark()
+      : ColorScheme.light();
+  final scheme = baseScheme.copyWith(
+    brightness: skin.brightness,
     primary: primary,
-    onPrimary: Colors.white,
+    onPrimary: skin.onPrimary,
     secondary: skin.accent,
-    onSecondary: Colors.white,
+    onSecondary: skin.brightness == Brightness.dark
+        ? const Color(0xFF152019)
+        : Colors.white,
     surface: skin.background,
     onSurface: skin.text,
-    error: Color(0xFFC6657D),
+    surfaceContainerLowest: skin.surface,
+    surfaceContainerLow: skin.surfaceMuted,
+    surfaceContainer: skin.surfaceMuted,
+    surfaceContainerHigh: skin.border,
+    surfaceContainerHighest: skin.border,
+    secondaryContainer: skin.accentSoft,
+    onSecondaryContainer: skin.text,
+    primaryContainer: skin.primarySoft,
+    onPrimaryContainer: skin.text,
+    outline: skin.muted,
+    outlineVariant: skin.border,
+    onSurfaceVariant: skin.muted,
+    error: Color(0xFFA65F5F),
   );
-  final softPrimary = Color.lerp(primary, Colors.white, 0.88)!;
   return ThemeData(
     useMaterial3: true,
+    brightness: skin.brightness,
     colorScheme: scheme,
     extensions: [
       AppThemeTokens(
-        softPrimary: softPrimary,
+        softPrimary: skin.primarySoft,
+        heroAccent: skin.heroAccent,
         heroStart: skin.heroStart,
         heroEnd: skin.heroEnd,
       ),
     ],
     scaffoldBackgroundColor: skin.background,
     fontFamily: 'PingFang SC',
-    textTheme: const TextTheme(
+    textTheme: TextTheme(
       displaySmall: TextStyle(
-        color: appText,
+        color: skin.text,
         fontSize: 34,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
         letterSpacing: 1,
       ),
       headlineSmall: TextStyle(
-        color: appText,
+        color: skin.text,
         fontSize: 26,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
       titleLarge: TextStyle(
-        color: appText,
+        color: skin.text,
         fontSize: 20,
         fontWeight: FontWeight.w700,
       ),
       titleMedium: TextStyle(
-        color: appText,
+        color: skin.text,
         fontSize: 16,
         fontWeight: FontWeight.w700,
       ),
-      bodyMedium: TextStyle(color: appText, fontSize: 14, height: 1.55),
-      bodySmall: TextStyle(color: appMuted, fontSize: 12, height: 1.45),
+      bodyMedium: TextStyle(color: skin.text, fontSize: 14, height: 1.55),
+      bodySmall: TextStyle(color: skin.muted, fontSize: 12, height: 1.45),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFFFFDFB),
-      hintStyle: const TextStyle(color: Color(0xFFB2ACA3), fontSize: 14),
+      fillColor: skin.surface,
+      hintStyle: TextStyle(
+        color: skin.placeholder,
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: appBorder),
+        borderSide: BorderSide(color: skin.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: appBorder),
+        borderSide: BorderSide(color: skin.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -125,13 +154,13 @@ ThemeData buildAppTheme([int skinIndex = 0]) {
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFFF6F2ED),
-      selectedColor: softPrimary,
+      backgroundColor: skin.surfaceMuted,
+      selectedColor: skin.primarySoft,
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      labelStyle: const TextStyle(
-        color: appMuted,
+      labelStyle: TextStyle(
+        color: skin.muted,
         fontSize: 11,
         fontWeight: FontWeight.w600,
       ),
@@ -143,6 +172,16 @@ ThemeData buildAppTheme([int skinIndex = 0]) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? primary.withValues(alpha: 0.38)
+              : primary,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? skin.muted
+              : skin.onPrimary,
+        ),
         minimumSize: const WidgetStatePropertyAll(Size(0, 46)),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 18, vertical: 10),
@@ -151,7 +190,7 @@ ThemeData buildAppTheme([int skinIndex = 0]) {
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         ),
         textStyle: const WidgetStatePropertyAll(
-          TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
     ),
@@ -163,34 +202,36 @@ ThemeData buildAppTheme([int skinIndex = 0]) {
         ),
       ),
     ),
-    dividerTheme: const DividerThemeData(
-      color: Color(0xFFF1EDE7),
-      thickness: 1,
-      space: 1,
-    ),
+    dividerTheme: DividerThemeData(color: skin.border, thickness: 1, space: 1),
     dialogTheme: DialogThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: skin.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      titleTextStyle: const TextStyle(
-        color: appText,
+      titleTextStyle: TextStyle(
+        color: skin.text,
         fontSize: 19,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: Colors.white,
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: skin.surface,
       surfaceTintColor: Colors.transparent,
       showDragHandle: false,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF383B37),
+      backgroundColor: skin.brightness == Brightness.dark
+          ? const Color(0xFFE4DAC5)
+          : const Color(0xFF383B37),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      contentTextStyle: const TextStyle(color: Colors.white),
+      contentTextStyle: TextStyle(
+        color: skin.brightness == Brightness.dark
+            ? const Color(0xFF20231F)
+            : Colors.white,
+      ),
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {

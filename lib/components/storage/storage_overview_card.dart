@@ -33,7 +33,7 @@ class StorageOverviewCard extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.12),
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.home_work_outlined,
                   color: Colors.white,
                   size: 23,

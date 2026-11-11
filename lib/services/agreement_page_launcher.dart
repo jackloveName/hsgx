@@ -16,6 +16,8 @@ abstract final class AgreementPageLauncher {
         ...base.queryParameters,
         'type': protocolKey,
         'dy': 'ios',
+        'operator': AppConfig.agreementOperatorName,
+        'email': AppConfig.agreementContactEmail,
       },
     );
     try {

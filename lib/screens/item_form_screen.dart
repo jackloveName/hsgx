@@ -7,28 +7,33 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app_store.dart';
+import '../components/item_tag_chip.dart';
 import '../components/stored_image.dart';
 import '../models.dart';
 import '../storage/local_image_store.dart';
 import '../widgets.dart';
 
 class ItemFormScreen extends StatefulWidget {
-  const ItemFormScreen({super.key, this.initial});
+  const ItemFormScreen({super.key, this.initial, this.wish, this.store});
 
   final InventoryItem? initial;
+  final WishEntry? wish;
+  final AppStore? store;
 
   @override
   State<ItemFormScreen> createState() => _ItemFormScreenState();
 }
 
 class _ItemFormScreenState extends State<ItemFormScreen> {
+  AppStore get _store => widget.store ?? AppStore.instance;
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _price;
   late final TextEditingController _currentValue;
   late int _quantityValue;
   late final TextEditingController _usageCount;
-  late final TextEditingController _targetDays;
+  late final TextEditingController _targetUsage;
   late final TextEditingController _note;
   late final TextEditingController _tag;
   late final TextEditingController _netWeight;
@@ -69,27 +74,31 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   void initState() {
     super.initState();
     final item = widget.initial;
-    _name = TextEditingController(text: item?.name ?? '');
+    final wish = widget.wish;
+    _name = TextEditingController(text: item?.name ?? wish?.name ?? '');
+    final draftPrice = item?.purchasePrice ?? wish?.expectedPrice ?? 0;
     _price = TextEditingController(
-      text: item == null ? '' : formatMoney(item.purchasePrice),
+      text: draftPrice <= 0 ? '' : formatMoney(draftPrice),
     );
     _currentValue = TextEditingController(
       text: item == null ? '' : formatMoney(item.currentValue),
     );
     _quantityValue = math.max(1, item?.quantity.round() ?? 1);
     _usageCount = TextEditingController(text: '${item?.manualUsageCount ?? 0}');
-    _targetDays = TextEditingController(
-      text: item == null || item.targetUseDays == 0
+    _targetUsage = TextEditingController(
+      text: item == null || item.targetUsageValue == 0
           ? ''
-          : '${item.targetUseDays}',
+          : '${item.targetUsageValue}',
     );
-    _note = TextEditingController(text: item?.note ?? '');
+    _note = TextEditingController(
+      text: item?.note ?? wish?.reason.trim() ?? '',
+    );
     _tag = TextEditingController();
     _netWeight = TextEditingController(text: item?.netWeight ?? '');
     _remainingWeight = TextEditingController(
       text: item?.remainingNetWeight ?? '',
     );
-    _category = item?.category ?? 'digital';
+    _category = item?.category ?? wish?.category ?? 'digital';
     _subcategory = item?.subcategory.isEmpty == false
         ? item!.subcategory
         : null;
@@ -128,7 +137,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     _price.dispose();
     _currentValue.dispose();
     _usageCount.dispose();
-    _targetDays.dispose();
+    _targetUsage.dispose();
     _note.dispose();
     _tag.dispose();
     _netWeight.dispose();
@@ -218,41 +227,55 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                 ],
               ),
             ),
-            const SectionHeading(title: '状态与使用'),
+            SectionHeading(title: _editing ? '状态与使用' : '使用方式'),
             SoftCard(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _FieldLabel('当前状态'),
-                  const SizedBox(height: 9),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final status in itemStatuses)
-                        ChoiceChip(
-                          selected: _status == status.id,
-                          onSelected: (_) =>
-                              setState(() => _status = status.id),
-                          showCheckmark: false,
-                          selectedColor: status.softColor,
-                          backgroundColor: const Color(0xFFF8F5F1),
-                          side: BorderSide.none,
-                          label: Text(
-                            status.name,
-                            style: TextStyle(
-                              color: _status == status.id
-                                  ? status.color
-                                  : appMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                  if (_editing) ...[
+                    const _FieldLabel('当前状态'),
+                    const SizedBox(height: 9),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.appSurfaceMutedColor,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          StatusPill(
+                            status: statusById(_status),
+                            compact: true,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '状态与处理信息请在一物一页中更改',
+                              style: TextStyle(
+                                color: context.appMutedColor,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    Text(
+                      '新物品将记录为使用中，保存后可在一物一页更改状态。',
+                      style: TextStyle(
+                        color: context.appMutedColor,
+                        fontSize: 10,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(value: 'auto', label: Text('自动按天')),
@@ -263,8 +286,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                         setState(() => _usageMode = value.first),
                     showSelectedIcon: false,
                     style: SegmentedButton.styleFrom(
-                      foregroundColor: appMuted,
-                      backgroundColor: const Color(0xFFF6F2ED),
+                      foregroundColor: context.appMutedColor,
+                      backgroundColor: context.appSurfaceMutedColor,
                       selectedForegroundColor: Theme.of(context)
                           .colorScheme
                           .primary,
@@ -274,7 +297,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                         0.82,
                       ),
                       side: BorderSide.none,
-                      textStyle: const TextStyle(
+                      textStyle: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -304,7 +327,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                   ],
                   const SizedBox(height: 13),
                   TextFormField(
-                    controller: _targetDays,
+                    controller: _targetUsage,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: InputDecoration(
@@ -346,87 +369,74 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                     },
                   ),
                   const SizedBox(height: 13),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _price,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: '购入价（$_currency）',
-                            prefixText: '${currency.symbol} ',
-                          ),
-                          validator: _validatePurchasePrice,
-                        ),
+                  _AdaptiveFieldRow(
+                    first: TextFormField(
+                      key: const Key('purchase-price-field'),
+                      controller: _price,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _currentValue,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: '当前估值（$_currency）',
-                            prefixText: '${currency.symbol} ',
-                          ),
-                          validator: _validateNonNegativeAmount,
-                        ),
+                      decoration: InputDecoration(
+                        labelText: '购入价（$_currency）',
+                        prefixText: '${currency.symbol} ',
+                        errorMaxLines: 2,
                       ),
-                    ],
+                      validator: _validatePurchasePrice,
+                    ),
+                    second: TextFormField(
+                      key: const Key('current-value-field'),
+                      controller: _currentValue,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: '当前估值（$_currency）',
+                        prefixText: '${currency.symbol} ',
+                        errorMaxLines: 2,
+                      ),
+                      validator: _validateNonNegativeAmount,
+                    ),
                   ),
                   const SizedBox(height: 13),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InputDecorator(
-                          decoration: const InputDecoration(labelText: '数量'),
-                          child: Row(
-                            children: [
-                              _QuantityButton(
-                                key: const Key('quantity-minus'),
-                                icon: Icons.remove_rounded,
-                                onTap: _quantityValue > 1
-                                    ? () => setState(() => _quantityValue -= 1)
-                                    : null,
-                              ),
-                              Expanded(
-                                child: Text(
-                                  '$_quantityValue',
-                                  key: const Key('quantity-value'),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              _QuantityButton(
-                                key: const Key('quantity-plus'),
-                                icon: Icons.add_rounded,
-                                onTap: () =>
-                                    setState(() => _quantityValue += 1),
-                              ),
-                            ],
+                  _AdaptiveFieldRow(
+                    first: InputDecorator(
+                      decoration: const InputDecoration(labelText: '数量'),
+                      child: Row(
+                        children: [
+                          _QuantityButton(
+                            key: const Key('quantity-minus'),
+                            icon: Icons.remove_rounded,
+                            onTap: _quantityValue > 1
+                                ? () => setState(() => _quantityValue -= 1)
+                                : null,
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: InkWell(
-                          onTap: _choosePurchaseDate,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: '购入日期',
+                          Expanded(
+                            child: Text(
+                              '$_quantityValue',
+                              key: const Key('quantity-value'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                            child: Text(_purchaseDate),
                           ),
-                        ),
+                          _QuantityButton(
+                            key: const Key('quantity-plus'),
+                            icon: Icons.add_rounded,
+                            onTap: () => setState(() => _quantityValue += 1),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                    second: InkWell(
+                      onTap: _choosePurchaseDate,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: '购入日期'),
+                        child: Text(_purchaseDate),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 13),
                   BottomSelectField<String>(
@@ -443,43 +453,32 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                     },
                   ),
                   const SizedBox(height: 13),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: BottomSelectField<String>(
-                          label: '收纳位置',
-                          value: _location.isEmpty ? null : _location,
-                          hint: '暂不设置',
-                          options: [
-                            const BottomSelectOption(value: '', label: '暂不设置'),
-                            for (final location
-                                in AppStore.instance.storageLocations)
-                              BottomSelectOption(
-                                value: location,
-                                label: location,
-                              ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _location = value ?? ''),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: BottomSelectField<String>(
-                          label: '保修/质期',
-                          value: _warranty,
-                          options: [
-                            for (final warranty in _warranties)
-                              BottomSelectOption(
-                                value: warranty,
-                                label: warranty.isEmpty ? '未记录' : warranty,
-                              ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _warranty = value ?? ''),
-                        ),
-                      ),
-                    ],
+                  _AdaptiveFieldRow(
+                    first: BottomSelectField<String>(
+                      label: '收纳位置',
+                      value: _location.isEmpty ? null : _location,
+                      hint: '暂不设置',
+                      options: [
+                        const BottomSelectOption(value: '', label: '暂不设置'),
+                        for (final location in _store.storageLocations)
+                          BottomSelectOption(value: location, label: location),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _location = value ?? ''),
+                    ),
+                    second: BottomSelectField<String>(
+                      label: '保修/质期',
+                      value: _warranty,
+                      options: [
+                        for (final warranty in _warranties)
+                          BottomSelectOption(
+                            value: warranty,
+                            label: warranty.isEmpty ? '未记录' : warranty,
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _warranty = value ?? ''),
+                    ),
                   ),
                   if (_warranty == '其他') ...[
                     const SizedBox(height: 13),
@@ -492,8 +491,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                           _warrantyEndDate.isEmpty ? '请选择日期' : _warrantyEndDate,
                           style: TextStyle(
                             color: _warrantyEndDate.isEmpty
-                                ? appMuted
-                                : appText,
+                                ? context.appPlaceholderColor
+                                : context.appTextColor,
                           ),
                         ),
                       ),
@@ -507,30 +506,23 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _netWeight,
-                          decoration: const InputDecoration(
-                            labelText: '净含量/克重',
-                            hintText: '例如：50g',
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
+                  _AdaptiveFieldRow(
+                    first: TextField(
+                      controller: _netWeight,
+                      decoration: const InputDecoration(
+                        labelText: '净含量/克重',
+                        hintText: '例如：50g',
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _remainingWeight,
-                          decoration: const InputDecoration(
-                            labelText: '剩余量',
-                            hintText: '例如：8g',
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    second: TextField(
+                      controller: _remainingWeight,
+                      decoration: const InputDecoration(
+                        labelText: '剩余量',
+                        hintText: '例如：8g',
                       ),
-                    ],
+                      onChanged: (_) => setState(() {}),
+                    ),
                   ),
                   const SizedBox(height: 13),
                   Row(
@@ -552,7 +544,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                         height: 52,
                         child: IconButton.filledTonal(
                           onPressed: _addTag,
-                          icon: const Icon(Icons.add_rounded),
+                          icon: Icon(Icons.add_rounded),
                         ),
                       ),
                     ],
@@ -565,16 +557,12 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                         spacing: 7,
                         runSpacing: 7,
                         children: [
-                          for (final tag in _tags)
-                            InputChip(
-                              label: Text(tag),
+                          for (final (index, tag) in _tags.indexed)
+                            ItemTagChip(
+                              label: tag,
+                              index: index,
                               onDeleted: () =>
                                   setState(() => _tags.remove(tag)),
-                              deleteIcon: const Icon(
-                                Icons.close_rounded,
-                                size: 14,
-                              ),
-                              visualDensity: VisualDensity.compact,
                             ),
                         ],
                       ),
@@ -620,14 +608,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('从相册选择'),
-              subtitle: const Text('可一次选择多张'),
+              leading: Icon(Icons.photo_library_outlined),
+              title: Text('从相册选择'),
+              subtitle: Text('可一次选择多张'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('拍照'),
+              leading: Icon(Icons.photo_camera_outlined),
+              title: Text('拍照'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
           ],
@@ -773,77 +761,71 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         double.tryParse(_currentValue.text.replaceAll(',', '')) ?? price;
     final quantity = _quantityValue;
     final original = widget.initial;
-    final history = List<StatusEvent>.from(
-      original?.statusHistory ??
-          [
+    final liveOriginal = original == null
+        ? null
+        : (_store.itemById(original.id) ?? original);
+    final item =
+        liveOriginal?.copyWith(
+          name: _name.text.trim(),
+          category: _category,
+          subcategory: _subcategory ?? '',
+          usageMode: _usageMode,
+          manualUsageCount: int.tryParse(_usageCount.text) ?? 0,
+          purchasePrice: price,
+          currentValue: current,
+          purchaseCurrency: _currency,
+          purchaseDate: _purchaseDate,
+          quantity: quantity.toDouble(),
+          netWeight: _netWeight.text.trim(),
+          remainingNetWeight: _remainingWeight.text.trim(),
+          purchaseChannel: _purchaseChannel,
+          storageLocation: _location,
+          warrantyPeriod: _warranty,
+          warrantyEndDate: _warranty == '其他' ? _warrantyEndDate : '',
+          targetUsageValue: int.tryParse(_targetUsage.text) ?? 0,
+          targetUsageUnit: _usageMode == 'manual' ? 'count' : 'day',
+          note: _note.text.trim(),
+          tags: List<String>.from(_tags),
+          imagePaths: List<String>.from(_imagePaths),
+        ) ??
+        InventoryItem(
+          id: 'it_${now.microsecondsSinceEpoch}',
+          name: _name.text.trim(),
+          category: _category,
+          subcategory: _subcategory ?? '',
+          status: _status,
+          usageMode: _usageMode,
+          manualUsageCount: int.tryParse(_usageCount.text) ?? 0,
+          purchasePrice: price,
+          currentValue: current,
+          purchaseCurrency: _currency,
+          purchaseDate: _purchaseDate,
+          createdAt: now.toIso8601String(),
+          quantity: quantity.toDouble(),
+          netWeight: _netWeight.text.trim(),
+          remainingNetWeight: _remainingWeight.text.trim(),
+          purchaseChannel: _purchaseChannel,
+          storageLocation: _location,
+          warrantyPeriod: _warranty,
+          warrantyEndDate: _warranty == '其他' ? _warrantyEndDate : '',
+          targetUsageValue: int.tryParse(_targetUsage.text) ?? 0,
+          targetUsageUnit: _usageMode == 'manual' ? 'count' : 'day',
+          note: _note.text.trim(),
+          tags: List<String>.from(_tags),
+          statusHistory: [
             StatusEvent(
               status: _status,
               at: now.toIso8601String(),
               note: '物品初始状态',
             ),
           ],
-    );
-    if (original != null && original.status != _status) {
-      history.add(
-        StatusEvent(
-          status: _status,
-          at: now.toIso8601String(),
-          note: '编辑时更新状态',
-        ),
-      );
-    }
-    final item = InventoryItem(
-      id: original?.id ?? 'it_${now.microsecondsSinceEpoch}',
-      name: _name.text.trim(),
-      category: _category,
-      subcategory: _subcategory ?? '',
-      status: _status,
-      usageMode: _usageMode,
-      manualUsageCount: int.tryParse(_usageCount.text) ?? 0,
-      purchasePrice: price,
-      currentValue: current,
-      purchaseCurrency: _currency,
-      purchaseDate: _purchaseDate,
-      createdAt: original?.createdAt ?? now.toIso8601String(),
-      quantity: quantity.toDouble(),
-      netWeight: _netWeight.text.trim(),
-      remainingNetWeight: _remainingWeight.text.trim(),
-      purchaseChannel: _purchaseChannel,
-      storageLocation: _location,
-      warrantyPeriod: _warranty,
-      warrantyEndDate: _warranty == '其他' ? _warrantyEndDate : '',
-      targetUseDays: int.tryParse(_targetDays.text) ?? 0,
-      note: _note.text.trim(),
-      tags: List<String>.from(_tags),
-      usageRecords: original?.usageRecords ?? const [],
-      statusHistory: history,
-      favorite: original?.favorite ?? false,
-      imagePaths: List<String>.from(_imagePaths),
-      relatedItemIds: original?.relatedItemIds ?? const [],
-      idleReason: original?.idleReason ?? '',
-      repairPlatform: original?.repairPlatform ?? '',
-      repairDays: original?.repairDays ?? 0,
-      repairContactName: original?.repairContactName ?? '',
-      repairContactPhone: original?.repairContactPhone ?? '',
-      disposalMethod: original?.disposalMethod ?? '',
-      disposalDetail: original?.disposalDetail ?? '',
-      disposalPlatform: original?.disposalPlatform ?? '',
-      disposalContact: original?.disposalContact ?? '',
-      disposalPrice: original?.disposalPrice ?? 0,
-      disposalCost: original?.disposalCost ?? 0,
-      processDate: original?.processDate ?? '',
-      recoveryMethod: original?.recoveryMethod ?? '',
-      recoveryTargetPrice: original?.recoveryTargetPrice ?? 0,
-      recoveryDeadline: original?.recoveryDeadline ?? '',
-      recoveryPlatform: original?.recoveryPlatform ?? '',
-      recoveryContact: original?.recoveryContact ?? '',
-      recoveryNote: original?.recoveryNote ?? '',
-    );
+          imagePaths: List<String>.from(_imagePaths),
+        );
     try {
       if (original == null) {
-        await AppStore.instance.addItem(item);
+        await _store.addItem(item);
       } else {
-        await AppStore.instance.updateItem(item);
+        await _store.updateItem(item);
       }
       _saved = true;
       if (original != null) {
@@ -857,7 +839,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         }
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(item);
       showAppSnack(context, original == null ? '已拾入匣中' : '物品已更新');
     } catch (error) {
       if (mounted) {
@@ -866,6 +848,38 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+class _AdaptiveFieldRow extends StatelessWidget {
+  const _AdaptiveFieldRow({required this.first, required this.second});
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            constraints.maxWidth < 330 ||
+            MediaQuery.textScalerOf(context).scale(10) > 13;
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, const SizedBox(height: 13), second],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -878,10 +892,10 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        color: appMuted,
+        color: context.appMutedColor,
       ),
     );
   }
@@ -941,7 +955,7 @@ class _PhotoEditor extends StatelessWidget {
                 child: Image.asset(category.asset),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -952,17 +966,20 @@ class _PhotoEditor extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    SizedBox(height: 3),
+                    const SizedBox(height: 3),
                     Text(
                       '最多 9 张，第一张作为封面',
-                      style: TextStyle(color: appMuted, fontSize: 10),
+                      style: TextStyle(
+                        color: context.appMutedColor,
+                        fontSize: 10,
+                      ),
                     ),
                   ],
                 ),
               ),
               Text(
                 '${paths.length}/9',
-                style: const TextStyle(color: appMuted, fontSize: 10),
+                style: TextStyle(color: context.appMutedColor, fontSize: 10),
               ),
             ],
           ),
@@ -994,7 +1011,7 @@ class _PhotoEditor extends StatelessWidget {
                             color: category.color.withValues(alpha: 0.18),
                           ),
                         ),
-                        child: const Icon(Icons.add_photo_alternate_outlined),
+                        child: Icon(Icons.add_photo_alternate_outlined),
                       ),
                     );
                   }
@@ -1039,7 +1056,7 @@ class _PhotoEditor extends StatelessWidget {
                               color: Colors.black54,
                               borderRadius: BorderRadius.circular(7),
                             ),
-                            child: const Text(
+                            child: Text(
                               '封面',
                               style: TextStyle(
                                 color: Colors.white,

@@ -90,8 +90,8 @@ class InsightsSnapshot {
     required this.periodPurchaseCount,
     required this.previousPurchaseAmount,
     required this.purchaseChange,
-    required this.actualDailyCost,
-    required this.targetDailyCost,
+    required this.actualAutoDailyCost,
+    required this.targetAutoDailyCost,
     required this.foreignCurrencyItemCount,
     required this.categories,
     required this.holdingCounts,
@@ -114,8 +114,8 @@ class InsightsSnapshot {
   final int periodPurchaseCount;
   final double previousPurchaseAmount;
   final double? purchaseChange;
-  final double actualDailyCost;
-  final double targetDailyCost;
+  final double actualAutoDailyCost;
+  final double targetAutoDailyCost;
   final int foreignCurrencyItemCount;
   final List<InsightCategoryMetric> categories;
   final List<int> holdingCounts;
@@ -188,18 +188,23 @@ class InsightsSnapshot {
       0,
       (sum, item) => sum + item.purchaseTotal,
     );
-    final allUsageDays = usedItems.fold<int>(
+    final dailyUsageItems = usedItems.where(
+      (item) => item.usageMode != 'manual',
+    );
+    final allUsageDays = dailyUsageItems.fold<int>(
       0,
       (sum, item) => sum + item.usageDays,
     );
-    final targetItems = usedItems.where((item) => item.effectiveTargetDays > 0);
+    final targetItems = dailyUsageItems.where(
+      (item) => item.effectiveTargetValue > 0,
+    );
     final targetPurchaseTotal = targetItems.fold<double>(
       0,
       (sum, item) => sum + item.purchaseTotal,
     );
     final targetDays = targetItems.fold<int>(
       0,
-      (sum, item) => sum + item.effectiveTargetDays,
+      (sum, item) => sum + item.effectiveTargetValue,
     );
 
     final categoryValues = <InsightCategoryMetric>[];
@@ -267,8 +272,12 @@ class InsightsSnapshot {
       periodPurchaseCount: periodPurchases.length,
       previousPurchaseAmount: previousAmount,
       purchaseChange: change,
-      actualDailyCost: allUsageDays == 0 ? 0 : usedPurchaseTotal / allUsageDays,
-      targetDailyCost: targetDays == 0 ? 0 : targetPurchaseTotal / targetDays,
+      actualAutoDailyCost: allUsageDays == 0
+          ? 0
+          : usedPurchaseTotal / allUsageDays,
+      targetAutoDailyCost: targetDays == 0
+          ? 0
+          : targetPurchaseTotal / targetDays,
       foreignCurrencyItemCount: foreignCurrencyItemCount,
       categories: categories,
       holdingCounts: holdingCounts,
@@ -457,7 +466,7 @@ List<InsightAlert> _buildAlerts(
         active
             .where(
               (item) =>
-                  item.effectiveTargetDays == 0 &&
+                  item.effectiveTargetValue == 0 &&
                   (usageByItem[item.id] ?? 0) > 0,
             )
             .toList()
@@ -468,7 +477,9 @@ List<InsightAlert> _buildAlerts(
         InsightAlert(
           label: '建立使用目标',
           title: item.name,
-          message: '设置目标使用天数后，可以判断它是否真正花得值。',
+          message: item.usageMode == 'manual'
+              ? '设置目标使用次数后，可以判断每次使用是否真正花得值。'
+              : '设置目标使用天数后，可以判断日均成本是否符合预期。',
           action: InsightAlertAction.item,
           itemId: item.id,
         ),

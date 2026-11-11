@@ -25,7 +25,7 @@ class GuestPageBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.82),
+          color: context.appSurfaceColor.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(17),
           border: Border.all(color: primary.withValues(alpha: 0.14)),
         ),
@@ -45,7 +45,7 @@ class GuestPageBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '本机游客',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                   ),
@@ -54,7 +54,7 @@ class GuestPageBanner extends StatelessWidget {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: appMuted, fontSize: 9),
+                    style: TextStyle(color: context.appMutedColor, fontSize: 9),
                   ),
                 ],
               ),
@@ -68,7 +68,7 @@ class GuestPageBanner extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: index < remaining
                           ? primary
-                          : const Color(0xFFD9D4CB),
+                          : context.appBorderColor,
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
@@ -83,12 +83,9 @@ class GuestPageBanner extends StatelessWidget {
                 minimumSize: const Size(0, 34),
                 padding: const EdgeInsets.symmetric(horizontal: 9),
                 foregroundColor: primary,
-                textStyle: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
+                textStyle: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
               ),
-              child: const Text('登录继续'),
+              child: Text('登录继续'),
             ),
           ],
         ),

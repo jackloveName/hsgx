@@ -3,10 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_store.dart';
+import '../components/bottom_sheet_handle.dart';
 import '../components/filter_pill_bar.dart';
 import '../components/page_action_button.dart';
+import '../components/wishlist/wishlist_empty_state.dart';
 import '../models.dart';
 import '../widgets.dart';
+import 'item_form_screen.dart';
 
 Future<WishEntry?> showWishEntrySheet(
   BuildContext context, {
@@ -22,35 +25,45 @@ Future<WishEntry?> showWishEntrySheet(
 }
 
 class WishlistScreen extends StatefulWidget {
-  const WishlistScreen({super.key});
+  const WishlistScreen({super.key, this.store});
+
+  final AppStore? store;
 
   @override
   State<WishlistScreen> createState() => _WishlistScreenState();
 }
 
 class _WishlistScreenState extends State<WishlistScreen> {
-  String _filter = 'pending';
+  String _filter = 'all';
+  DateTime _summaryMonth = DateTime(DateTime.now().year, DateTime.now().month);
+
+  AppStore get _store => widget.store ?? AppStore.instance;
 
   static const _tabs = [
+    ('all', '全部', appBlue, Color(0xFFEDF2FB)),
     ('pending', '待决定', Color(0xFFC28B35), Color(0xFFFBF3DF)),
     ('decided', '已决定', Color(0xFF607FC7), Color(0xFFEDF2FB)),
-    ('all', '全部', appBlue, Color(0xFFEDF2FB)),
   ];
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: AppStore.instance,
+      animation: _store,
       builder: (context, _) {
         final primary = Theme.of(context).colorScheme.primary;
         final softPrimary = Color.lerp(primary, Colors.white, 0.88)!;
-        final wishlist = AppStore.instance.wishlist;
+        final wishlist = _store.wishlist;
+        final viewingCurrentMonth = _isCurrentSummaryMonth;
         final entries =
             wishlist.where((entry) {
+              final activityDate = _wishActivityDate(entry);
+              final inSelectedMonth =
+                  activityDate.year == _summaryMonth.year &&
+                  activityDate.month == _summaryMonth.month;
               return switch (_filter) {
                 'pending' => entry.status == 'cooling',
-                'decided' => entry.status != 'cooling',
-                _ => true,
+                'decided' => entry.status != 'cooling' && inSelectedMonth,
+                _ => entry.status == 'cooling' || inSelectedMonth,
               };
             }).toList()..sort((first, second) {
               final firstPending = first.status == 'cooling';
@@ -78,7 +91,11 @@ class _WishlistScreenState extends State<WishlistScreen> {
             children: [
               _WishDecisionOverview(
                 wishes: wishlist,
-                avoidedAmount: AppStore.instance.avoidedAmount,
+                month: _summaryMonth,
+                onPreviousMonth: () => _changeSummaryMonth(-1),
+                onNextMonth: _isCurrentSummaryMonth
+                    ? null
+                    : () => _changeSummaryMonth(1),
               ),
               const SizedBox(height: 14),
               FilterPillBar<String>(
@@ -101,8 +118,21 @@ class _WishlistScreenState extends State<WishlistScreen> {
               if (entries.isEmpty)
                 WishlistEmptyState(
                   hasAnyWishes: wishlist.isNotEmpty,
+                  emptyTitle: viewingCurrentMonth ? null : '这个月份还没有心愿',
+                  emptyDescription: viewingCurrentMonth
+                      ? null
+                      : '切换到其他月份，或返回本月查看最新心愿。',
+                  actionLabel: viewingCurrentMonth ? null : '返回本月',
                   onAdd: _addWish,
-                  onShowAll: () => setState(() => _filter = 'all'),
+                  onShowAll: () {
+                    setState(() {
+                      _filter = 'all';
+                      _summaryMonth = DateTime(
+                        DateTime.now().year,
+                        DateTime.now().month,
+                      );
+                    });
+                  },
                 )
               else
                 for (final entry in entries) ...[
@@ -111,9 +141,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
                     entry: entry,
                     onEdit: () => _editWish(entry),
                     onDelete: () => _delete(entry),
-                    onWanted: () => _decide(entry, 'wanted'),
                     onAbandoned: () => _decide(entry, 'abandoned'),
-                    onExtend: () => _extendCooling(entry),
+                    onAddItem: () => _addItemFromWish(entry),
                   ),
                   const SizedBox(height: 11),
                 ],
@@ -130,10 +159,15 @@ class _WishlistScreenState extends State<WishlistScreen> {
       if (!mounted) return;
       await runStoreAction(
         context,
-        () => AppStore.instance.addWish(entry),
+        () => _store.addWish(entry),
         successMessage: '心愿已放入冷静期',
       );
-      if (mounted) setState(() => _filter = 'pending');
+      if (mounted) {
+        setState(() {
+          _filter = 'all';
+          _summaryMonth = DateTime(DateTime.now().year, DateTime.now().month);
+        });
+      }
     }
   }
 
@@ -148,7 +182,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     if (confirmed && mounted) {
       await runStoreAction(
         context,
-        () => AppStore.instance.deleteWish(entry.id),
+        () => _store.deleteWish(entry.id),
         successMessage: '心愿已删除',
       );
     }
@@ -159,157 +193,254 @@ class _WishlistScreenState extends State<WishlistScreen> {
     if (updated == null || !mounted) return;
     await runStoreAction(
       context,
-      () => AppStore.instance.updateWish(updated),
-      successMessage: '心愿已更新',
+      () => _store.updateWish(updated),
+      successMessage: entry.status == 'abandoned' ? '心愿已重新放入冷静期' : '心愿已更新',
     );
+    if (mounted && entry.status == 'abandoned') {
+      setState(() {
+        _filter = 'pending';
+        _summaryMonth = DateTime(DateTime.now().year, DateTime.now().month);
+      });
+    }
   }
 
   Future<void> _decide(WishEntry entry, String status) async {
     await runStoreAction(
       context,
-      () => AppStore.instance.decideWish(entry.id, status),
-      successMessage: status == 'wanted'
-          ? '已确认想要'
-          : '已放弃「${entry.name}」，避免花费 ¥${formatMoney(entry.expectedPrice)}',
+      () => _store.decideWish(entry.id, status),
+      successMessage: switch (status) {
+        'wanted' => '已确认想要',
+        'achieved' => '心愿已完成',
+        _ => '已放弃「${entry.name}」，避免花费 ¥${formatMoney(entry.expectedPrice)}',
+      },
     );
   }
 
-  Future<void> _extendCooling(WishEntry entry) async {
-    final extended = entry.copyWith(
-      createdAt: DateTime.now().toIso8601String(),
-      coolingDays: 7,
-      status: 'cooling',
+  Future<void> _addItemFromWish(WishEntry entry) async {
+    final item = await Navigator.of(context).push<InventoryItem?>(
+      MaterialPageRoute<InventoryItem?>(
+        builder: (_) => ItemFormScreen(wish: entry, store: _store),
+      ),
     );
-    await runStoreAction(
-      context,
-      () => AppStore.instance.updateWish(extended),
-      successMessage: '已再冷静 7 天',
+    if (item == null || !mounted) return;
+    await _store.updateWish(
+      entry.copyWith(
+        status: 'achieved',
+        achievedAt: DateTime.now().toIso8601String(),
+      ),
     );
+  }
+
+  bool get _isCurrentSummaryMonth {
+    final now = DateTime.now();
+    return _summaryMonth.year == now.year && _summaryMonth.month == now.month;
+  }
+
+  void _changeSummaryMonth(int delta) {
+    setState(() {
+      _summaryMonth = DateTime(_summaryMonth.year, _summaryMonth.month + delta);
+    });
   }
 }
 
-String _desireLabel(String value) {
-  return switch (value) {
-    'need' => '现在需要',
-    'long-term' => '长期改善',
-    'impulse' => '短暂冲动',
-    _ => '未标注',
-  };
+String _achievedAtLabel(WishEntry entry) {
+  final value = entry.achievedAtDate ?? entry.createdAtDate;
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${formatDate(value)} ${two(value.hour)}:${two(value.minute)}';
+}
+
+DateTime _wishActivityDate(WishEntry entry) {
+  if (entry.status == 'achieved') {
+    return entry.achievedAtDate ?? entry.createdAtDate;
+  }
+  return entry.createdAtDate;
 }
 
 class _WishDecisionOverview extends StatelessWidget {
   const _WishDecisionOverview({
     required this.wishes,
-    required this.avoidedAmount,
+    required this.month,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
   });
 
   final List<WishEntry> wishes;
-  final double avoidedAmount;
+  final DateTime month;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback? onNextMonth;
 
   @override
   Widget build(BuildContext context) {
-    final pending = wishes.where((entry) => entry.status == 'cooling').toList()
-      ..sort((a, b) => a.remainingDays.compareTo(b.remainingDays));
-    final decided = wishes.length - pending.length;
-    final nearest = pending.isEmpty ? null : pending.first;
-    final title = pending.isEmpty
-        ? wishes.isEmpty
-              ? '把想买的，先交给时间'
-              : '每个心愿都已经有了答案'
-        : '还有 ${pending.length} 个心愿等待决定';
-    final detail = nearest == null
-        ? wishes.isEmpty
-              ? '记录一个心愿，让冷静期帮你分辨需要与冲动。'
-              : '愿每一次放下与选择，都让生活更清楚。'
-        : nearest.remainingDays == 0
-        ? '「${nearest.name}」的冷静期已经结束，可以做出决定了。'
-        : '最近的「${nearest.name}」还有 ${nearest.remainingDays} 天结束冷静期。';
+    final now = DateTime.now();
+    final achievedThisMonth = wishes.where((entry) {
+      if (entry.status != 'achieved') return false;
+      final activityDate = _wishActivityDate(entry);
+      return activityDate.year == month.year &&
+          activityDate.month == month.month;
+    }).toList();
+    final wishSpent = achievedThisMonth.fold<double>(
+      0,
+      (sum, entry) => sum + entry.expectedPrice,
+    );
     return GradientCard(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 17),
+      key: const Key('wish-spend-overview'),
+      padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '未入匣',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
+          _WishOverviewHeader(
+            title: month.year == now.year && month.month == now.month
+                ? '本月心愿花费'
+                : '心愿花费',
+            monthSwitch: _MonthSwitch(
+              month: month,
+              onPrevious: onPreviousMonth,
+              onNext: onNextMonth,
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 11),
           Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.13),
+                  color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.12),
                   ),
                 ),
-                child: const Icon(
-                  Icons.savings_outlined,
+                child: Icon(
+                  Icons.receipt_long_outlined,
                   color: Colors.white,
-                  size: 24,
+                  size: 22,
                 ),
               ),
-              const SizedBox(width: 13),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      style: const TextStyle(
+                      '¥${formatMoney(wishSpent, compact: true)}',
+                      style: TextStyle(
                         color: Colors.white,
                         fontFamily: 'Songti SC',
-                        fontSize: 20,
+                        fontSize: 28,
+                        height: 1.1,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 6),
                     Text(
-                      detail,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                        height: 1.45,
-                      ),
+                      '共实现 ${achievedThisMonth.length} 个心愿',
+                      style: TextStyle(color: Colors.white70, fontSize: 10),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(height: 1, color: Colors.white24),
-          const SizedBox(height: 13),
-          Row(
+        ],
+      ),
+    );
+  }
+}
+
+class _WishOverviewHeader extends StatelessWidget {
+  const _WishOverviewHeader({required this.title, required this.monthSwitch});
+
+  final String title;
+  final Widget monthSwitch;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      title,
+      style: TextStyle(
+        color: Colors.white70,
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 2,
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useStackedLayout =
+            constraints.maxWidth < 260 ||
+            MediaQuery.textScalerOf(context).scale(10) > 13;
+        if (useStackedLayout) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: MiniMetric(
-                  label: '待决定',
-                  value: '${pending.length}',
-                  dark: true,
-                ),
-              ),
-              Expanded(
-                child: MiniMetric(label: '已决定', value: '$decided', dark: true),
-              ),
-              Expanded(
-                child: MiniMetric(
-                  label: '避免花费',
-                  value: '¥${formatMoney(avoidedAmount, compact: true)}',
-                  dark: true,
-                ),
-              ),
+              text,
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: monthSwitch),
             ],
+          );
+        }
+        return Row(children: [text, const Spacer(), monthSwitch]);
+      },
+    );
+  }
+}
+
+class _MonthSwitch extends StatelessWidget {
+  const _MonthSwitch({
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final DateTime month;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: const Key('wish-summary-previous-month'),
+            tooltip: '上个月',
+            onPressed: onPrevious,
+            style: IconButton.styleFrom(
+              foregroundColor: Colors.white,
+              minimumSize: const Size(30, 30),
+              maximumSize: const Size(30, 30),
+              padding: EdgeInsets.zero,
+            ),
+            icon: Icon(Icons.chevron_left_rounded, size: 18),
+          ),
+          Text(
+            '${month.year}年${month.month}月',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          IconButton(
+            key: const Key('wish-summary-next-month'),
+            tooltip: '下个月',
+            onPressed: onNext,
+            style: IconButton.styleFrom(
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white30,
+              minimumSize: const Size(30, 30),
+              maximumSize: const Size(30, 30),
+              padding: EdgeInsets.zero,
+            ),
+            icon: Icon(Icons.chevron_right_rounded, size: 18),
           ),
         ],
       ),
@@ -323,120 +454,79 @@ class _WishCard extends StatefulWidget {
     required this.entry,
     required this.onEdit,
     required this.onDelete,
-    required this.onWanted,
     required this.onAbandoned,
-    required this.onExtend,
+    required this.onAddItem,
   });
 
   final WishEntry entry;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onWanted;
   final VoidCallback onAbandoned;
-  final VoidCallback onExtend;
+  final VoidCallback onAddItem;
 
   @override
   State<_WishCard> createState() => _WishCardState();
 }
 
 class _WishCardState extends State<_WishCard> {
-  bool _revealEarlyDecision = false;
-
   WishEntry get entry => widget.entry;
+
+  Future<void> _confirmAbandonWish() async {
+    final confirmed = await confirmAction(
+      context,
+      title: '放弃这个心愿？',
+      message: '放弃后该心愿将标记为“已放弃”，并计入避免花费。',
+      confirmLabel: '放弃',
+      destructive: true,
+    );
+    if (confirmed && mounted) {
+      widget.onAbandoned();
+    }
+  }
+
+  Future<void> _confirmAddToWishlist() async {
+    final confirmed = await confirmAction(
+      context,
+      title: '拾入心愿匣？',
+      message: '拾入心愿匣后，该心愿状态将变为“已达成”，是否确认操作？',
+      confirmLabel: '确认',
+    );
+    if (confirmed && mounted) {
+      widget.onAddItem();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final status = switch (entry.status) {
       'wanted' => ('确认想要', const Color(0xFF2E7568), const Color(0xFFE7F6F1)),
-      'abandoned' => ('已放弃', const Color(0xFFC6657D), const Color(0xFFFAEDF2)),
+      'abandoned' => ('已放弃', const Color(0xFFA65F5F), const Color(0xFFFAEDF2)),
       'achieved' => ('已达成', const Color(0xFF607FC7), const Color(0xFFEDF2FB)),
       _ => ('冷静中', const Color(0xFFC28B35), const Color(0xFFFBF3DF)),
     };
     return SoftCard(
       onTap: () => showModalBottomSheet<void>(
         context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.name,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  entry.reason.isEmpty ? '还没有写下想要它的原因。' : entry.reason,
-                  style: const TextStyle(color: appMuted, height: 1.6),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: MiniMetric(
-                        label: '预计价格',
-                        value: '¥${formatMoney(entry.expectedPrice)}',
-                      ),
-                    ),
-                    Expanded(
-                      child: MiniMetric(
-                        label: '冷静期',
-                        value: '${entry.coolingDays} 天',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (entry.desireType.isNotEmpty) ...[
-                  Text(
-                    '购买动机 · ${_desireLabel(entry.desireType)}',
-                    style: const TextStyle(
-                      color: appMuted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => widget.onEdit(),
-                        );
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('编辑'),
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => widget.onDelete(),
-                        );
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('删除心愿'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        builder: (sheetContext) => _WishDetailSheet(
+          entry: entry,
+          statusLabel: status.$1,
+          statusColor: status.$2,
+          statusBackground: status.$3,
+          onEdit: () {
+            Navigator.pop(sheetContext);
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => widget.onEdit(),
+            );
+          },
+          onDelete: () {
+            Navigator.pop(sheetContext);
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => widget.onDelete(),
+            );
+          },
         ),
       ),
       child: Row(
@@ -455,7 +545,7 @@ class _WishCardState extends State<_WishCard> {
                         entry.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
                         ),
@@ -484,9 +574,10 @@ class _WishCardState extends State<_WishCard> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${entry.categoryInfo.name} · 预计 ¥${formatMoney(entry.expectedPrice)}'
-                  '${entry.desireType.isEmpty ? '' : ' · ${_desireLabel(entry.desireType)}'}',
-                  style: const TextStyle(color: appMuted, fontSize: 11),
+                  entry.status == 'achieved'
+                      ? '${entry.categoryInfo.name} · 达成于 ${_achievedAtLabel(entry)}'
+                      : '${entry.categoryInfo.name} · 预计 ¥${formatMoney(entry.expectedPrice)}',
+                  style: TextStyle(color: context.appMutedColor, fontSize: 11),
                 ),
                 if (entry.reason.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
@@ -494,11 +585,39 @@ class _WishCardState extends State<_WishCard> {
                     entry.reason.trim(),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF777269),
+                    style: TextStyle(
+                      color: context.appMutedColor,
                       fontSize: 10,
                       height: 1.42,
                     ),
+                  ),
+                ],
+                if (entry.status == 'wanted') ...[
+                  const SizedBox(height: 11),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _confirmAbandonWish,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          child: Text('放弃', style: TextStyle(fontSize: 10)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _confirmAddToWishlist,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          child: Text('拾入心愿匣', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (entry.status == 'cooling') ...[
@@ -510,80 +629,50 @@ class _WishCardState extends State<_WishCard> {
                           ? 0
                           : (entry.elapsedDays / entry.coolingDays).clamp(0, 1),
                       minHeight: 5,
-                      backgroundColor: const Color(0xFFF1EEE9),
+                      backgroundColor: context.appSurfaceMutedColor,
                       color: const Color(0xFFC28B35),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '已冷静 ${entry.elapsedDays}/${entry.coolingDays} 天 · ${entry.remainingDays == 0 ? '可以决定了' : '还有 ${entry.remainingDays} 天决定'}',
-                    style: const TextStyle(
-                      color: Color(0xFF777269),
+                    '实际已冷静 ${entry.elapsedDays} 天 · ${entry.remainingDays == 0 ? '可以决定了' : '还有 ${entry.remainingDays} 天决定'}',
+                    style: TextStyle(
+                      color: context.appMutedColor,
                       fontSize: 10,
                     ),
                   ),
                   const SizedBox(height: 10),
-                  if (entry.remainingDays == 0 || _revealEarlyDecision)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonal(
-                            onPressed: widget.onWanted,
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 35),
-                              padding: EdgeInsets.zero,
-                            ),
-                            child: const Text(
-                              '仍想要',
-                              style: TextStyle(fontSize: 11),
-                            ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _confirmAddToWishlist,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: EdgeInsets.zero,
                           ),
+                          child: Text('拾入心愿匣', style: TextStyle(fontSize: 11)),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton.tonal(
-                            onPressed: widget.onAbandoned,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFFAEDF2),
-                              foregroundColor: const Color(0xFFC6657D),
-                              minimumSize: const Size(0, 35),
-                              padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.tonal(
+                          onPressed: _confirmAbandonWish,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Color.alphaBlend(
+                              Theme.of(context).colorScheme.error
+                                  .withValues(alpha: 0.1),
+                              context.appSurfaceColor,
                             ),
-                            child: const Text(
-                              '放弃',
-                              style: TextStyle(fontSize: 11),
-                            ),
+                            foregroundColor: const Color(0xFFA65F5F),
+                            minimumSize: const Size(0, 36),
+                            padding: EdgeInsets.zero,
                           ),
+                          child: Text('放弃', style: TextStyle(fontSize: 11)),
                         ),
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: widget.onExtend,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 35),
-                              padding: EdgeInsets.zero,
-                            ),
-                            child: const Text(
-                              '再冷静 7 天',
-                              style: TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _revealEarlyDecision = true),
-                          child: const Text(
-                            '提前决定',
-                            style: TextStyle(fontSize: 10),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),
@@ -594,33 +683,314 @@ class _WishCardState extends State<_WishCard> {
   }
 }
 
-class WishlistEmptyState extends StatelessWidget {
-  const WishlistEmptyState({
-    super.key,
-    required this.hasAnyWishes,
-    required this.onAdd,
-    required this.onShowAll,
+class _WishDetailSheet extends StatelessWidget {
+  const _WishDetailSheet({
+    required this.entry,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.statusBackground,
+    required this.onEdit,
+    required this.onDelete,
   });
 
-  final bool hasAnyWishes;
-  final VoidCallback onAdd;
-  final VoidCallback onShowAll;
+  final WishEntry entry;
+  final String statusLabel;
+  final Color statusColor;
+  final Color statusBackground;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return EmptyState(
-      title: hasAnyWishes ? '这个状态下还没有心愿' : '心愿匣还是空的',
-      description: hasAnyWishes
-          ? '当前筛选状态没有记录，可以查看全部心愿。'
-          : '把想买的东西先放进来，让时间帮你判断。',
-      icon: hasAnyWishes
-          ? Icons.filter_alt_off_rounded
-          : Icons.favorite_border_rounded,
-      action: PrimaryButton(
-        label: hasAnyWishes ? '查看全部心愿' : '记录一个心愿',
-        icon: hasAnyWishes ? Icons.filter_alt_rounded : Icons.add_rounded,
-        expanded: false,
-        onPressed: hasAnyWishes ? onShowAll : onAdd,
+    final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = Color.lerp(primary, context.appSurfaceColor, 0.88)!;
+    final reason = entry.reason.trim().isEmpty
+        ? '还没有写下想要它的原因。'
+        : entry.reason.trim();
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+      ),
+      decoration: BoxDecoration(
+        color: context.appSurfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 10, 22, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const BottomSheetHandle(),
+              const SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CategoryImage(category: entry.categoryInfo, size: 62),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Songti SC',
+                            fontSize: 24,
+                            height: 1.2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              entry.categoryInfo.name,
+                              style: TextStyle(
+                                color: context.appMutedColor,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusBackground,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    key: const Key('wish-detail-close'),
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.pop(context),
+                    style: IconButton.styleFrom(
+                      backgroundColor: context.appSurfaceMutedColor,
+                      foregroundColor: context.appMutedColor,
+                      minimumSize: const Size(36, 36),
+                      maximumSize: const Size(36, 36),
+                    ),
+                    icon: Icon(Icons.close_rounded, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
+                decoration: BoxDecoration(
+                  color: softPrimary.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: primary.withValues(alpha: 0.09)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.format_quote_rounded,
+                      color: primary.withValues(alpha: 0.65),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        reason,
+                        style: TextStyle(
+                          color: context.appMutedColor,
+                          fontSize: 12,
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 15,
+                ),
+                decoration: BoxDecoration(
+                  color: context.appSurfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: context.appBorderColor),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: MiniMetric(
+                        label: entry.status == 'achieved' ? '达成时间' : '预计价格',
+                        value: entry.status == 'achieved'
+                            ? _achievedAtLabel(entry)
+                            : '¥${formatMoney(entry.expectedPrice)}',
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 38,
+                      color: context.appBorderColor,
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: MiniMetric(
+                        label: '冷静期',
+                        value: '${entry.coolingDays} 天',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (entry.status == 'cooling') ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
+                  decoration: BoxDecoration(
+                    color: Color.alphaBlend(
+                      const Color(0xFFC79A4A).withValues(alpha: 0.09),
+                      context.appSurfaceColor,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFC79A4A).withValues(alpha: 0.24),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '冷静进度',
+                            style: TextStyle(
+                              color: Color(0xFF8C6B2F),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '实际 ${entry.elapsedDays} 天',
+                            style: TextStyle(
+                              color: Color(0xFF9A8157),
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 9),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: LinearProgressIndicator(
+                          value: entry.coolingDays == 0
+                              ? 0
+                              : (entry.elapsedDays / entry.coolingDays).clamp(
+                                  0,
+                                  1,
+                                ),
+                          minHeight: 6,
+                          backgroundColor: context.appSurfaceMutedColor,
+                          color: const Color(0xFFC79A4A),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        entry.elapsedDays > entry.coolingDays
+                            ? '计划冷静 ${entry.coolingDays} 天，目前已超过 ${entry.elapsedDays - entry.coolingDays} 天。'
+                            : entry.remainingDays == 0
+                            ? '计划冷静 ${entry.coolingDays} 天，已经可以做出决定了。'
+                            : '计划冷静 ${entry.coolingDays} 天，还有 ${entry.remainingDays} 天。',
+                        style: TextStyle(
+                          color: Color(0xFF8B7D67),
+                          fontSize: 10,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              if (entry.status == 'achieved')
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: onDelete,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFB75A70),
+                      minimumSize: const Size(0, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    child: const Text('删除'),
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        key: const Key('wish-detail-edit'),
+                        onPressed: onEdit,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primary,
+                          minimumSize: const Size(0, 44),
+                          side: BorderSide(
+                            color: primary.withValues(alpha: 0.24),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Text('编辑心愿'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextButton(
+                        key: const Key('wish-detail-delete'),
+                        onPressed: onDelete,
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFB75A70),
+                          minimumSize: const Size(0, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          side: BorderSide(
+                            color: const Color(0xFFB75A70)
+                                .withValues(alpha: 0.28),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Text('删除'),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -641,7 +1011,6 @@ class _AddWishSheetState extends State<_AddWishSheet> {
   late final TextEditingController _reason;
   late String _category;
   late int _coolingDays;
-  late String _desireType;
 
   @override
   void initState() {
@@ -654,7 +1023,6 @@ class _AddWishSheetState extends State<_AddWishSheet> {
     _reason = TextEditingController(text: initial?.reason ?? '');
     _category = initial?.category ?? 'digital';
     _coolingDays = initial?.coolingDays ?? 7;
-    _desireType = initial?.desireType ?? (initial == null ? 'need' : '');
   }
 
   @override
@@ -668,12 +1036,13 @@ class _AddWishSheetState extends State<_AddWishSheet> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final movingBackToWishlist = widget.initial?.status == 'abandoned';
     final keyboardInset = media.viewInsets.bottom;
     final availableHeight =
         media.size.height - keyboardInset - media.padding.top;
     final maxHeight = keyboardInset > 0
         ? math.min(520.0, math.max(220.0, availableHeight * 0.62))
-        : math.min(680.0, media.size.height * 0.78);
+        : math.min(720.0, media.size.height * 0.84);
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
@@ -682,144 +1051,225 @@ class _AddWishSheetState extends State<_AddWishSheet> {
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: Container(
           key: const Key('wish-form-sheet'),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: context.appSurfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
           ),
           child: SafeArea(
             top: false,
             child: SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0DCD5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
+                  const BottomSheetHandle(),
                   const SizedBox(height: 18),
-                  Text(
-                    widget.initial == null ? '记录一个心愿' : '编辑心愿',
-                    style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '先把它留在这里，过几天再决定要不要带回家。',
-                    style: TextStyle(color: appMuted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: '想要什么'),
-                  ),
-                  const SizedBox(height: 12),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: Color.lerp(
+                            Theme.of(context).colorScheme.primary,
+                            Colors.white,
+                            0.86,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          widget.initial == null
+                              ? Icons.favorite_border_rounded
+                              : Icons.edit_note_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 23,
+                        ),
+                      ),
+                      const SizedBox(width: 13),
                       Expanded(
-                        child: BottomSelectField<String>(
-                          label: '分类',
-                          value: _category,
-                          options: [
-                            for (final category in itemCategories)
-                              BottomSelectOption(
-                                value: category.id,
-                                label: category.name,
-                                leading: Image.asset(
-                                  category.asset,
-                                  width: 28,
-                                  height: 28,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.initial == null ? '记一愿' : '编辑心愿',
+                              style: TextStyle(
+                                fontFamily: 'Songti SC',
+                                fontSize: 24,
+                                height: 1.15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '关闭',
+                        onPressed: () => Navigator.pop(context),
+                        style: IconButton.styleFrom(
+                          backgroundColor: context.appSurfaceMutedColor,
+                          foregroundColor: context.appMutedColor,
+                          minimumSize: const Size(36, 36),
+                          maximumSize: const Size(36, 36),
+                        ),
+                        icon: Icon(Icons.close_rounded, size: 18),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _WishFormSection(
+                    icon: Icons.inventory_2_outlined,
+                    title: '心愿内容',
+                    subtitle: '记下它为什么进入你的生活',
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _name,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: '想要什么',
+                            hintText: '例如：一台掌上游戏机',
+                          ),
+                        ),
+                        const SizedBox(height: 11),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 6,
+                              child: BottomSelectField<String>(
+                                label: '分类',
+                                value: _category,
+                                options: [
+                                  for (final category in itemCategories)
+                                    BottomSelectOption(
+                                      value: category.id,
+                                      label: category.name,
+                                      leading: Image.asset(
+                                        category.asset,
+                                        width: 28,
+                                        height: 28,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _category = value);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 11),
+                            Expanded(
+                              flex: 4,
+                              child: TextField(
+                                controller: _price,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                decoration: const InputDecoration(
+                                  labelText: '预计价格',
+                                  prefixText: '¥ ',
                                 ),
                               ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 11),
+                        TextField(
+                          controller: _reason,
+                          minLines: 2,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: '为什么想要',
+                            hintText: '写下真实用途，帮助未来的自己判断',
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _WishFormSection(
+                    icon: Icons.hourglass_empty_rounded,
+                    title: '冷静计划',
+                    subtitle: '给决定留出一点距离',
+                    child: Column(
+                      children: [
+                        BottomSelectField<int>(
+                          label: '冷静期',
+                          value: _coolingDays,
+                          options: const [
+                            BottomSelectOption(value: 3, label: '3 天'),
+                            BottomSelectOption(value: 7, label: '7 天'),
+                            BottomSelectOption(value: 14, label: '14 天'),
+                            BottomSelectOption(value: 30, label: '30 天'),
                           ],
                           onChanged: (value) {
                             if (value != null) {
-                              setState(() => _category = value);
+                              setState(() => _coolingDays = value);
                             }
                           },
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _price,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
+                        const SizedBox(height: 11),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          decoration: BoxDecoration(
+                            color: Color.alphaBlend(
+                              const Color(0xFFC79A4A).withValues(alpha: 0.09),
+                              context.appSurfaceColor,
+                            ),
+                            borderRadius: BorderRadius.circular(13),
                           ),
-                          decoration: const InputDecoration(
-                            labelText: '预计价格',
-                            prefixText: '¥ ',
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.lightbulb_outline_rounded,
+                                color: Color(0xFFB18842),
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '冷静期结束后再决定。期间随时可以回来调整。',
+                                  style: TextStyle(
+                                    color: const Color(0xFF8B7D67)
+                                        .withValues(alpha: 0.95),
+                                    fontSize: 10,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  BottomSelectField<int>(
-                    label: '冷静期',
-                    value: _coolingDays,
-                    options: const [
-                      BottomSelectOption(value: 3, label: '3 天'),
-                      BottomSelectOption(value: 7, label: '7 天'),
-                      BottomSelectOption(value: 14, label: '14 天'),
-                      BottomSelectOption(value: 30, label: '30 天'),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _coolingDays = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  BottomSelectField<String>(
-                    label: '购买动机',
-                    value: _desireType.isEmpty ? null : _desireType,
-                    hint: '请选择',
-                    options: const [
-                      BottomSelectOption(value: 'need', label: '现在需要'),
-                      BottomSelectOption(value: 'long-term', label: '长期改善'),
-                      BottomSelectOption(value: 'impulse', label: '短暂冲动'),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _desireType = value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _reason,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: '为什么想要',
-                      hintText: '写下真实用途，帮助未来的自己判断',
-                      alignLabelWithHint: true,
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   PrimaryButton(
-                    label: '放入心愿匣',
+                    label: '保存',
                     onPressed: () {
                       final name = _name.text.trim();
                       if (name.isEmpty) {
                         showAppSnack(context, '请填写心愿名称');
                         return;
                       }
+                      if (_price.text.trim().isEmpty) {
+                        showAppSnack(context, '请填写预计价格');
+                        return;
+                      }
                       final price = double.tryParse(
                         _price.text.replaceAll(',', ''),
                       );
-                      if (_price.text.trim().isNotEmpty &&
-                          (price == null || price < 0)) {
+                      if (price == null || price < 0) {
                         showAppSnack(context, '请输入有效的预计价格');
                         return;
                       }
+                      final now = DateTime.now().toIso8601String();
                       Navigator.pop(
                         context,
                         WishEntry(
@@ -828,14 +1278,17 @@ class _AddWishSheetState extends State<_AddWishSheet> {
                               'wish_${DateTime.now().microsecondsSinceEpoch}',
                           name: name,
                           category: _category,
-                          expectedPrice: price ?? 0,
+                          expectedPrice: price,
                           reason: _reason.text.trim(),
                           coolingDays: _coolingDays,
-                          createdAt:
-                              widget.initial?.createdAt ??
-                              DateTime.now().toIso8601String(),
-                          status: widget.initial?.status ?? 'cooling',
-                          desireType: _desireType,
+                          createdAt: movingBackToWishlist
+                              ? now
+                              : widget.initial?.createdAt ?? now,
+                          status: movingBackToWishlist
+                              ? 'cooling'
+                              : widget.initial?.status ?? 'cooling',
+                          desireType: widget.initial?.desireType ?? '',
+                          achievedAt: widget.initial?.achievedAt ?? '',
                         ),
                       );
                     },
@@ -845,6 +1298,85 @@ class _AddWishSheetState extends State<_AddWishSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _WishFormSection extends StatelessWidget {
+  const _WishFormSection({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = Color.lerp(primary, context.appSurfaceColor, 0.87)!;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 15),
+      decoration: BoxDecoration(
+        color: context.appSurfaceColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: context.appBorderColor),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4A4032).withValues(alpha: 0.035),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: softPrimary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: primary, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: context.appMutedColor,
+                        fontSize: 9,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          child,
+        ],
       ),
     );
   }

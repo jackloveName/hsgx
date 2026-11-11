@@ -5,6 +5,7 @@ abstract final class ApiSettings {
   static const appBrand = AppConfig.appBrand;
   static const defaultTimeout = Duration(seconds: 10);
   static const configTimeout = Duration(seconds: 20);
-  static const privacyProtocolKey = 'ZD_PRIVACY_PROTOC';
-  static const registerProtocolKey = 'ZD_REGISTER_PROTOC';
+
+  static const privacyProtocolKey = 'HSGX_PRIVACY_PROTOC';
+  static const registerProtocolKey = 'HSGX_REGISTER_PROTOC';
 }

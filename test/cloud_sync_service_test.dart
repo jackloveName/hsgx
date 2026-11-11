@@ -52,6 +52,7 @@ void main() {
         items: [item],
         wishlist: const [],
         storageLocations: const ['书房'],
+        storageLocationIcons: const {'书房': 'book'},
       ),
     );
 
@@ -73,6 +74,41 @@ void main() {
         '13800138000StorageLocations',
       ]),
     );
+    final locationBody = saveBodies.firstWhere(
+      (body) => body['paramKey'] == '13800138000StorageLocations',
+    );
+    expect(jsonDecode(locationBody['paramValue'] as String), [
+      {'name': '书房', 'icon': 'book'},
+    ]);
+  });
+
+  test('云端归处配置可以读取预设图标并兼容旧版名称列表', () async {
+    final service = CloudSyncService(
+      client: MockClient((request) async {
+        final key = request.url.pathSegments.last;
+        final data = key == '13800138000ItemData'
+            ? '[]'
+            : key == '13800138000WishListData'
+            ? '[]'
+            : jsonEncode([
+                {'name': '书房', 'icon': 'book'},
+                '健身角',
+              ]);
+        return http.Response(
+          jsonEncode({'code': '00000', 'data': data}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final result = await service.loadAccountData(
+      phone: '13800138000',
+      token: 'token',
+    );
+
+    expect(result.storageLocations, ['书房', '健身角']);
+    expect(result.storageLocationIcons['书房'], 'book');
   });
 
   test('云端写入失败时抛出错误，调用方可以保留游客数据', () async {

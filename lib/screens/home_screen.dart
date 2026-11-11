@@ -38,66 +38,72 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = AppStore.instance;
-    final items = store.items;
-    final insight = buildHomeInsight(items, store.wishlist);
-    final dailyItem = _dailyItem(store, insight);
-    final recentPreview = recentItemsForHome(items);
-    final todayActions = _todayActions(context, store, insight);
-    return AppBackdrop(
-      child: SafeArea(
-        bottom: false,
-        child: ContentPane(
-          child: RefreshIndicator(
-            onRefresh: () => _refresh(context),
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 116),
-              children: [
-                const LocalDataStatusBanner(
-                  margin: EdgeInsets.only(bottom: 12),
+    return AnimatedBuilder(
+      animation: AppStore.instance,
+      builder: (context, _) {
+        final store = AppStore.instance;
+        final items = store.items;
+        final insight = buildHomeInsight(items, store.wishlist);
+        final dailyItem = _dailyItem(store, insight);
+        final recentPreview = recentItemsForHome(items);
+        final todayActions = _todayActions(context, store, insight, dailyItem);
+        return AppBackdrop(
+          child: SafeArea(
+            bottom: false,
+            child: ContentPane(
+              child: RefreshIndicator(
+                onRefresh: () => _refresh(context),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 116),
+                  children: [
+                    const LocalDataStatusBanner(
+                      margin: EdgeInsets.only(bottom: 12),
+                    ),
+                    if (store.isGuest) ...[
+                      _HomeHeader(
+                        guestAddsRemaining: store.guestAddsRemaining,
+                        onLogin: () => _openLogin(context),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    HomeDailyHero(
+                      item: dailyItem,
+                      title: dailyItem?.name ?? '从第一件美好开始',
+                      message: _dailyMessage(dailyItem, insight),
+                      actionLabel: _dailyActionLabel(dailyItem, insight),
+                      onAction: dailyItem == null
+                          ? () => MainShell.of(context).openAddItem()
+                          : () =>
+                                _handleDailyAction(context, dailyItem, insight),
+                    ),
+                    if (todayActions.isNotEmpty) ...[
+                      const SectionHeading(title: '今天可以这样与匣相处'),
+                      HomeTodayActions(actions: todayActions),
+                    ],
+                    const SectionHeading(title: '匣中去处'),
+                    _QuickActions(
+                      onStorage: () => _push(context, const StorageScreen()),
+                      onWishlist: () => _push(context, const WishlistScreen()),
+                      onRecovery: () => _push(context, const RecoveryScreen()),
+                    ),
+                    if (items.isNotEmpty) ...[
+                      const SectionHeading(title: '匣中常在'),
+                      RecentItemShelf(
+                        items: recentPreview,
+                        onTap: (item) => _openDetail(context, item),
+                      ),
+                    ] else ...[
+                      const SectionHeading(title: '记录之后，你会看到'),
+                      const _FirstRecordGuide(),
+                    ],
+                  ],
                 ),
-                _HomeHeader(
-                  isGuest: store.isGuest,
-                  guestAddsRemaining: store.guestAddsRemaining,
-                  onLogin: () => _openLogin(context),
-                ),
-                const SizedBox(height: 18),
-                HomeDailyHero(
-                  item: dailyItem,
-                  title: dailyItem?.name ?? '从第一件美好开始',
-                  message: _dailyMessage(dailyItem, insight),
-                  actionLabel: _dailyActionLabel(dailyItem, insight),
-                  onAction: dailyItem == null
-                      ? () => MainShell.of(context).openAddItem()
-                      : () => _handleDailyAction(context, dailyItem, insight),
-                ),
-                if (todayActions.isNotEmpty) ...[
-                  const SectionHeading(title: '今天可以这样与匣相处'),
-                  HomeTodayActions(actions: todayActions),
-                ],
-                const SectionHeading(title: '匣中去处'),
-                _QuickActions(
-                  onStorage: () => _push(context, const StorageScreen()),
-                  onWishlist: () => _push(context, const WishlistScreen()),
-                  onRecovery: () => _push(context, const RecoveryScreen()),
-                ),
-                if (items.isNotEmpty) ...[
-                  const SectionHeading(title: '匣中常在'),
-                  RecentItemShelf(
-                    items: recentPreview,
-                    onTap: (item) => _openDetail(context, item),
-                    onLongPress: (item) => _showRecentActions(context, item),
-                  ),
-                ] else ...[
-                  const SectionHeading(title: '记录之后，你会看到'),
-                  const _FirstRecordGuide(),
-                ],
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -218,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _push(context, const RecoveryScreen());
       return;
     }
-    if (insight.itemId != item.id && item.usageMode == 'manual') {
+    if (insight.itemId != item.id && item.canRecordManualUsage) {
       await runStoreAction(
         context,
         () => AppStore.instance.incrementUsage(item.id, 1),
@@ -233,17 +239,19 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
     AppStore store,
     HomeInsight insight,
+    InventoryItem? dailyItem,
   ) {
     if (store.items.isEmpty) return const [];
     final actions = <HomeActionItem>[
-      HomeActionItem(
-        label: _insightLabel(insight.type),
-        title: insight.title,
-        message: insight.message,
-        icon: _insightIcon(insight.type),
-        color: _insightColor(context),
-        onTap: () => _handleInsight(context, insight),
-      ),
+      if (insight.itemId == null || insight.itemId != dailyItem?.id)
+        HomeActionItem(
+          label: _insightLabel(insight.type),
+          title: insight.title,
+          message: insight.message,
+          icon: _insightIcon(insight.type),
+          color: _insightColor(context),
+          onTap: () => _handleInsight(context, insight),
+        ),
     ];
     final idleItems = store.items
         .where((item) => item.status == 'idle')
@@ -354,81 +362,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _showRecentActions(
-    BuildContext context,
-    InventoryItem item,
-  ) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 38,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE1DCD5),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                item.name,
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.open_in_new_rounded),
-                title: const Text('查看详情'),
-                onTap: () => Navigator.pop(sheetContext, 'detail'),
-              ),
-              if (item.usageMode == 'manual')
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.add_task_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text('记录一次使用'),
-                  subtitle: Text(
-                    '当前已记录 ${item.manualUsageCount} 次',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  onTap: () => Navigator.pop(sheetContext, 'use'),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!context.mounted) return;
-    if (action == 'detail') {
-      _openDetail(context, item);
-    } else if (action == 'use') {
-      await runStoreAction(
-        context,
-        () => AppStore.instance.incrementUsage(item.id, 1),
-        successMessage: '已记录一次使用',
-      );
-    }
-  }
-
   void _openDetail(BuildContext context, InventoryItem item) {
     _push(context, ItemDetailScreen(itemId: item.id));
   }
@@ -491,113 +424,54 @@ class _QuickActions extends StatelessWidget {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({
-    required this.isGuest,
-    required this.guestAddsRemaining,
-    required this.onLogin,
-  });
+  const _HomeHeader({required this.guestAddsRemaining, required this.onLogin});
 
-  final bool isGuest;
   final int guestAddsRemaining;
   final VoidCallback onLogin;
 
   @override
   Widget build(BuildContext context) {
-    final hour = DateTime.now().hour;
-    final greeting = switch (hour) {
-      < 6 => '夜深了',
-      < 11 => '早上好',
-      < 14 => '中午好',
-      < 18 => '下午好',
-      _ => '晚上好',
-    };
-    final now = DateTime.now();
-    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     final primary = Theme.of(context).colorScheme.primary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        Material(
+          color: primary.withValues(alpha: 0.075),
+          borderRadius: BorderRadius.circular(15),
+          child: InkWell(
+            onTap: onLogin,
+            borderRadius: BorderRadius.circular(15),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(11, 9, 10, 9),
+              child: Row(
                 children: [
-                  Text(
-                    '$greeting，匣中今日如何？',
-                    style: const TextStyle(
-                      fontFamily: 'Songti SC',
-                      fontSize: 25,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
+                  Icon(Icons.cloud_off_rounded, size: 16, color: primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      guestAddsRemaining == 0
+                          ? '本机游客 · 添加次数已用完'
+                          : '本机游客 · 还可添加 $guestAddsRemaining 次',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
                   Text(
-                    '${now.month} 月 ${now.day} 日 · 星期${weekdays[now.weekday - 1]}',
-                    style: const TextStyle(
-                      color: appMuted,
+                    '登录',
+                    style: TextStyle(
+                      color: primary,
                       fontSize: 10,
-                      letterSpacing: 0.3,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
+                  Icon(Icons.chevron_right_rounded, size: 16, color: primary),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.asset(
-                'static/image/app-icon-192.png',
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ],
-        ),
-        if (isGuest) ...[
-          const SizedBox(height: 13),
-          Material(
-            color: primary.withValues(alpha: 0.075),
-            borderRadius: BorderRadius.circular(15),
-            child: InkWell(
-              onTap: onLogin,
-              borderRadius: BorderRadius.circular(15),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(11, 9, 10, 9),
-                child: Row(
-                  children: [
-                    Icon(Icons.cloud_off_rounded, size: 16, color: primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        guestAddsRemaining == 0
-                            ? '本机游客 · 添加次数已用完'
-                            : '本机游客 · 还可添加 $guestAddsRemaining 次',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '登录',
-                      style: TextStyle(
-                        color: primary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Icon(Icons.chevron_right_rounded, size: 16, color: primary),
-                  ],
-                ),
-              ),
-            ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -638,7 +512,7 @@ class _FirstRecordGuide extends StatelessWidget {
                     children: [
                       Text(
                         entries[index].$2,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
                         ),
@@ -646,7 +520,10 @@ class _FirstRecordGuide extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         entries[index].$3,
-                        style: const TextStyle(color: appMuted, fontSize: 9),
+                        style: TextStyle(
+                          color: context.appMutedColor,
+                          fontSize: 9,
+                        ),
                       ),
                     ],
                   ),

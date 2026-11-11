@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hsgx/components/item_tag_chip.dart';
 import 'package:hsgx/models.dart';
 import 'package:hsgx/screens/item_form_screen.dart';
 import 'package:hsgx/widgets.dart';
@@ -35,12 +36,15 @@ void main() {
       statusHistory: [
         StatusEvent(status: 'inuse', at: '2026-01-01T00:00:00.000'),
       ],
+      favorite: true,
+      favoriteAt: '2026-02-03T10:20:00.000',
     );
 
     final restored = InventoryItem.fromJson(item.toJson());
     expect(restored.name, '耳机');
     expect(restored.tags, ['通勤', '常用']);
     expect(restored.statusHistory.single.status, 'inuse');
+    expect(restored.favoriteAt, '2026-02-03T10:20:00.000');
   });
 
   test('心愿序列化后保留购买动机并兼容旧数据', () {
@@ -49,6 +53,8 @@ void main() {
       name: '相机',
       createdAt: '2026-01-01T00:00:00.000',
       desireType: 'long-term',
+      status: 'achieved',
+      achievedAt: '2026-02-03T14:25:00.000',
     );
     final restored = WishEntry.fromJson(wish.toJson());
     final legacy = WishEntry.fromJson({
@@ -58,7 +64,9 @@ void main() {
     });
 
     expect(restored.desireType, 'long-term');
+    expect(restored.achievedAt, '2026-02-03T14:25:00.000');
     expect(legacy.desireType, isEmpty);
+    expect(legacy.achievedAt, isEmpty);
   });
 
   test('物品序列化后保留多图、币种、关联和完整生命周期信息', () {
@@ -118,6 +126,29 @@ void main() {
     expect(restored.recoveryDeadline, '2026-12-01');
     expect(restored.recoveryPlatform, '闲鱼');
     expect(restored.recoveryNote, '先清洁镜头');
+  });
+
+  test('旧目标使用天数字段会迁移为带单位的通用目标值', () {
+    final manual = InventoryItem.fromJson({
+      'id': 'legacy-manual-target',
+      'name': '旧手动物品',
+      'usageMode': 'manual',
+      'targetUseDays': 42,
+    });
+    final automatic = InventoryItem.fromJson({
+      'id': 'legacy-auto-target',
+      'name': '旧自动物品',
+      'usageMode': 'auto',
+      'targetUseDays': 365,
+    });
+
+    expect(manual.targetUsageValue, 42);
+    expect(manual.targetUsageUnit, 'count');
+    expect(manual.effectiveTargetValue, 42);
+    expect(automatic.targetUsageValue, 365);
+    expect(automatic.targetUsageUnit, 'day');
+    expect(manual.toJson()['targetUsageValue'], 42);
+    expect(manual.toJson()['targetUsageUnit'], 'count');
   });
 
   testWidgets('下拉字段从底部弹出并回传选择结果', (tester) async {
@@ -180,7 +211,8 @@ void main() {
     expect(emptyStateWidth, screenWidth - 40);
   });
 
-  testWidgets('日期选择器从底部弹出并使用中文', (tester) async {
+  testWidgets('日期选择器从底部弹出并只显示一组月份切换', (tester) async {
+    DateTime? picked;
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('zh', 'CN'),
@@ -194,13 +226,15 @@ void main() {
           body: Builder(
             builder: (context) => Center(
               child: TextButton(
-                onPressed: () => showAppDatePicker(
-                  context,
-                  initialDate: DateTime(2026, 11, 4),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2030),
-                  title: '选择日期',
-                ),
+                onPressed: () async {
+                  picked = await showAppDatePicker(
+                    context,
+                    initialDate: DateTime(2026, 11, 4),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                    title: '选择日期',
+                  );
+                },
                 child: const Text('打开日期'),
               ),
             ),
@@ -213,14 +247,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('选择日期'), findsOneWidget);
+    expect(find.text('选择后点击下方按钮确认'), findsNothing);
     expect(find.text('取消'), findsOneWidget);
     expect(find.byType(CalendarDatePicker), findsOneWidget);
     expect(find.textContaining('2026年'), findsWidgets);
+    expect(find.byTooltip('上个月'), findsOneWidget);
     final pickerTop = tester.getTopLeft(find.byType(CalendarDatePicker)).dy;
     expect(
       pickerTop,
       greaterThan(tester.getSize(find.byType(Scaffold)).height / 3),
     );
+
+    await tester.tap(find.text('10'));
+    await tester.pump();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(picked, DateTime(2026, 11, 10));
   });
 
   testWidgets('物品数量使用加减步进器且最小值为1', (tester) async {
@@ -268,5 +311,79 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('请输入购入价'), findsOneWidget);
+  });
+
+  testWidgets('物品编辑页不再绕过状态处理流程', (tester) async {
+    final item = InventoryItem(
+      id: 'idle-item',
+      name: '闲置物品',
+      purchasePrice: 100,
+      purchaseDate: '2026-01-01',
+      createdAt: '2026-01-01T00:00:00.000',
+      status: 'idle',
+      idleReason: '暂时不用',
+      statusHistory: [
+        StatusEvent(status: 'idle', at: '2026-01-01T00:00:00.000'),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(home: ItemFormScreen(initial: item)));
+    await tester.pump();
+
+    expect(find.text('状态与处理信息请在一物一页中更改'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, '已处理'), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, '维修中'), findsNothing);
+  });
+
+  testWidgets('新建物品只展示使用方式和默认使用中提示', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ItemFormScreen()));
+    await tester.pump();
+
+    expect(find.text('使用方式'), findsOneWidget);
+    expect(find.text('状态与使用'), findsNothing);
+    expect(find.text('当前状态'), findsNothing);
+    expect(find.text('新物品将记录为使用中，保存后可在一物一页更改状态。'), findsOneWidget);
+  });
+
+  testWidgets('购入价验证错误时同行字段顶部保持对齐', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MaterialApp(home: ItemFormScreen()));
+    await tester.pump();
+
+    final save = find.text('放入匣中');
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入购入价'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('purchase-price-field'))).dy,
+      closeTo(
+        tester.getTopLeft(find.byKey(const Key('current-value-field'))).dy,
+        0.01,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('拾一件使用与一物一页一致的彩色标签样式', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ItemFormScreen()));
+    await tester.pump();
+
+    final tagField = find.widgetWithText(TextField, '添加标签');
+    await tester.enterText(tagField, '通勤');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+
+    expect(find.byType(ItemTagChip), findsOneWidget);
+    expect(find.text('通勤'), findsOneWidget);
+
+    final deleteTag = find.byTooltip('删除标签');
+    await tester.ensureVisible(deleteTag);
+    await tester.pumpAndSettle();
+    await tester.tap(deleteTag);
+    await tester.pump();
+    expect(find.byType(ItemTagChip), findsNothing);
   });
 }

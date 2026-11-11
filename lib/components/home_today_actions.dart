@@ -34,8 +34,7 @@ class HomeTodayActions extends StatelessWidget {
         children: [
           for (var index = 0; index < actions.length; index++) ...[
             _ActionRow(action: actions[index]),
-            if (index < actions.length - 1)
-              const Divider(height: 1, indent: 66, color: Color(0xFFF1EDE7)),
+            if (index < actions.length - 1) const ContentDivider(indent: 66),
           ],
         ],
       ),
@@ -74,20 +73,10 @@ class _ActionRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      action.label,
-                      style: TextStyle(
-                        color: action.color,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
                       action.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -97,8 +86,8 @@ class _ActionRow extends StatelessWidget {
                       action.message,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: appMuted,
+                      style: TextStyle(
+                        color: context.appMutedColor,
                         fontSize: 10,
                         height: 1.4,
                       ),
@@ -107,7 +96,7 @@ class _ActionRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 7),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 color: Color(0xFFB9B4AC),
                 size: 19,

@@ -23,16 +23,17 @@ class LocalDataStatusBanner extends StatelessWidget {
         final isError = store.loadError != null;
         final message = store.loadError ?? store.persistenceWarning!;
         final color = isError
-            ? const Color(0xFFC6657D)
+            ? const Color(0xFFA65F5F)
             : const Color(0xFFC28B35);
         return Padding(
           padding: margin,
           child: Container(
             padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
             decoration: BoxDecoration(
-              color: isError
-                  ? const Color(0xFFFFF5F7)
-                  : const Color(0xFFFFFAF0),
+              color: Color.alphaBlend(
+                color.withValues(alpha: 0.1),
+                context.appSurfaceColor,
+              ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: color.withValues(alpha: 0.2)),
             ),
@@ -61,8 +62,8 @@ class LocalDataStatusBanner extends StatelessWidget {
                         message,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: appMuted,
+                        style: TextStyle(
+                          color: context.appMutedColor,
                           fontSize: 9,
                           height: 1.4,
                         ),

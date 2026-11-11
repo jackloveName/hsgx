@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hsgx/app_store.dart';
+import 'package:hsgx/components/item_summary_card.dart';
 import 'package:hsgx/domain/items_browse.dart';
 import 'package:hsgx/models.dart';
 import 'package:hsgx/screens/items_screen.dart';
 import 'package:hsgx/storage/app_state_storage.dart';
 import 'package:hsgx/theme.dart';
+import 'package:hsgx/widgets.dart';
 
 class _MemoryStorage implements AppStateStorage {
   final Map<String, String> values = {};
@@ -23,6 +25,7 @@ class _MemoryStorage implements AppStateStorage {
 InventoryItem _item({
   required String id,
   required String location,
+  String? name,
   double currentValue = 100,
   String createdAt = '2026-01-01T00:00:00.000',
   String category = 'digital',
@@ -32,7 +35,7 @@ InventoryItem _item({
 }) {
   return InventoryItem(
     id: id,
-    name: '物品 $id',
+    name: name ?? '物品 $id',
     category: category,
     purchaseDate: '2026-01-01',
     createdAt: createdAt,
@@ -152,6 +155,34 @@ void main() {
     expect(find.text('降噪耳机'), findsOneWidget);
   });
 
+  testWidgets('三个物品视图的长物品名称使用单行省略', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const longName = '陪伴很多年仍然非常喜欢的限量版复古机械键盘';
+    final store = AppStore(storage: _MemoryStorage());
+    await store.load();
+    await store.addItem(_item(id: 'long-name', name: longName, location: '书房'));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(body: ItemsScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+
+    for (final view in ['陈列', '台账', '收纳']) {
+      if (view != '陈列') {
+        await tester.tap(find.text(view));
+        await tester.pumpAndSettle();
+      }
+      final name = tester.widget<Text>(find.text(longName));
+      expect(name.maxLines, 1);
+      expect(name.overflow, TextOverflow.ellipsis);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('陈列模式显示分类和手动计次调节器', (tester) async {
     final store = AppStore(storage: _MemoryStorage());
     await store.load();
@@ -175,6 +206,20 @@ void main() {
 
     expect(find.textContaining('已记录'), findsNothing);
     expect(find.text('服饰箱包'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('物品 manual')).dy,
+      greaterThan(tester.getBottomLeft(find.byType(ItemPhoto)).dy),
+    );
+    final categoryContainer = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byType(ItemCategoryTag),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final categoryDecoration = categoryContainer.decoration! as BoxDecoration;
+    expect(categoryDecoration.color, itemCategories[1].softColor);
     expect(find.text('3'), findsOneWidget);
     expect(find.text('¥33.33/次'), findsOneWidget);
     expect(
@@ -210,7 +255,7 @@ void main() {
     expect(find.text('3'), findsOneWidget);
   });
 
-  testWidgets('陈列不显示位置，台账显示位置、分类和最近使用', (tester) async {
+  testWidgets('陈列不显示位置，台账显示位置和分类', (tester) async {
     final store = AppStore(storage: _MemoryStorage());
     await store.load();
     await store.addItem(_item(id: 'located', location: '玄关'));
@@ -233,7 +278,7 @@ void main() {
     expect(find.text('未设置位置'), findsNothing);
     expect(find.text('数码产品 · 玄关'), findsOneWidget);
     expect(find.textContaining('已使用'), findsOneWidget);
-    expect(find.textContaining('最近使用：'), findsOneWidget);
+    expect(find.textContaining('最近使用：'), findsNothing);
     expect(find.text('¥100'), findsNothing);
     expect(
       tester.getTopLeft(find.textContaining('/天')).dx,
@@ -242,11 +287,15 @@ void main() {
 
     await tester.tap(find.text('收纳'));
     await tester.pumpAndSettle();
-    expect(find.text('数码产品'), findsOneWidget);
-    expect(find.textContaining('最近使用：'), findsOneWidget);
+    expect(find.text('数码产品 · 玄关'), findsOneWidget);
+    expect(find.textContaining('最近使用：'), findsNothing);
     expect(
       tester.getTopLeft(find.textContaining('/天')).dx,
       greaterThan(tester.getTopLeft(find.text('物品 located')).dx),
+    );
+    expect(
+      find.byKey(const ValueKey('location-item-card-located')),
+      findsOneWidget,
     );
   });
 
@@ -312,8 +361,8 @@ void main() {
     expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
     expect(find.text('¥25/次'), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
-    expect(find.text('服饰箱包'), findsOneWidget);
-    expect(find.textContaining('最近使用：'), findsOneWidget);
+    expect(find.text('服饰箱包 · 客厅'), findsOneWidget);
+    expect(find.textContaining('最近使用：'), findsNothing);
     expect(
       tester.getBottomLeft(find.text('¥25/次')).dy,
       lessThan(
@@ -327,6 +376,21 @@ void main() {
       greaterThan(tester.getCenter(find.text('物品 manual')).dx),
     );
     expect(
+      find.byKey(const ValueKey('location-item-card-manual')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const Key('location-item-visual-manual')))
+          .width,
+      closeTo(
+        tester
+            .getSize(find.byKey(const Key('location-item-visual-manual')))
+            .height,
+        0.01,
+      ),
+    );
+    expect(
       tester.getTopLeft(find.text('使用中')).dx,
       lessThan(tester.getTopLeft(find.text('物品 manual')).dx),
     );
@@ -335,5 +399,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.itemById('manual')!.manualUsageCount, 3);
     expect(find.text('¥33.33/次'), findsOneWidget);
+  });
+
+  testWidgets('三个物品视图统一状态文案并隐藏最近使用', (tester) async {
+    final store = AppStore(storage: _MemoryStorage());
+    await store.load();
+    await store.addItem(
+      _item(id: 'idle', location: '客厅').copyWith(
+        status: 'idle',
+        statusHistory: [
+          StatusEvent(
+            status: 'idle',
+            at: DateTime.now()
+                .subtract(const Duration(days: 4))
+                .toIso8601String(),
+          ),
+        ],
+      ),
+    );
+    await store.addItem(
+      _item(id: 'repair', location: '客厅').copyWith(
+        status: 'repairing',
+        repairDays: 3,
+        statusHistory: [
+          StatusEvent(status: 'repairing', at: '2026-11-01T00:00:00.000'),
+        ],
+      ),
+    );
+    await store.addItem(
+      _item(id: 'retired', location: '客厅').copyWith(
+        status: 'retired',
+        statusHistory: [
+          StatusEvent(
+            status: 'retired',
+            at: DateTime.now()
+                .subtract(const Duration(days: 2))
+                .toIso8601String(),
+          ),
+        ],
+      ),
+    );
+    final idleText = '已闲置 ${store.itemById('idle')!.idleDays} 天';
+    final retiredUsageText = '已使用 ${store.itemById('retired')!.usageDays} 天';
+    final retiredText = '已退役 ${store.itemById('retired')!.retiredDays} 天';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(body: ItemsScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+
+    for (final view in ['陈列', '台账', '收纳']) {
+      if (view != '陈列') {
+        await tester.tap(find.text(view));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text(idleText), findsOneWidget);
+      expect(find.text('预计维修 3 天'), findsOneWidget);
+      expect(find.text(retiredText), findsOneWidget);
+      expect(find.text(retiredUsageText), findsNothing);
+      expect(find.textContaining('最近使用：'), findsNothing);
+      expect(find.textContaining('参考回血'), findsNothing);
+    }
   });
 }

@@ -67,7 +67,7 @@ void main() {
     expect(store.items, isEmpty);
     expect(store.wishlist, isEmpty);
     final snapshot = jsonDecode(storage.values[storageKey]!) as Map;
-    expect(snapshot['version'], 7);
+    expect(snapshot['version'], 11);
     expect(snapshot.containsKey('sessionToken'), isFalse);
   });
 
@@ -88,8 +88,30 @@ void main() {
 
     await store.toggleFavorite('legacy');
     final migrated = jsonDecode(storage.values[storageKey]!) as Map;
-    expect(migrated['version'], 7);
+    expect(migrated['version'], 11);
     expect(store.itemById('legacy')?.favorite, isTrue);
+    expect(store.itemById('legacy')?.favoriteAt, isNotEmpty);
+    expect(DateTime.tryParse(store.itemById('legacy')!.favoriteAt), isNotNull);
+  });
+
+  test('旧四套皮肤设置会迁移到新的三套收藏场景', () async {
+    const expected = <int, int>{-1: -1, 0: 0, 1: 1, 2: 1, 3: 2};
+
+    for (final migration in expected.entries) {
+      final storage = MemoryAppStateStorage();
+      storage.values[storageKey] = jsonEncode({
+        'version': 10,
+        'items': <Object?>[],
+        'wishlist': <Object?>[],
+        'storageLocations': ['书房'],
+        'skinIndex': migration.key,
+      });
+      final store = AppStore(storage: storage);
+
+      await store.load();
+
+      expect(store.skinIndex, migration.value);
+    }
   });
 
   test('旧版明文会话 Token 会迁移到安全存储并从业务快照移除', () async {
@@ -248,6 +270,53 @@ void main() {
     expect(store.cloudSyncPending, isFalse);
   });
 
+  test('应用重启后会继续上传上次未完成的账号修改', () async {
+    final storage = MemoryAppStateStorage();
+    final tokenStore = MemorySessionTokenStore()..value = 'token';
+    var savedConfigCount = 0;
+    final cloudDone = Completer<void>();
+    final cloud = CloudSyncService(
+      client: MockClient((request) async {
+        if (request.method == 'POST') {
+          savedConfigCount += 1;
+          if (savedConfigCount == 3 && !cloudDone.isCompleted) {
+            cloudDone.complete();
+          }
+        }
+        return http.Response(
+          jsonEncode({'code': '00000', 'data': true}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    storage.values[storageKey] = jsonEncode({
+      'version': 10,
+      'items': [testItem('pending-sync').toJson()],
+      'wishlist': <Object?>[],
+      'storageLocations': ['书房'],
+      'authMode': 'account',
+      'accountPhone': '13800138000',
+      'accountName': '测试账号',
+      'cloudSyncPending': true,
+    });
+    final store = AppStore(
+      storage: storage,
+      tokenStore: tokenStore,
+      cloudService: cloud,
+    );
+
+    await store.load();
+    await cloudDone.future.timeout(const Duration(seconds: 2));
+    for (var attempt = 0; attempt < 20 && store.cloudSyncPending; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(savedConfigCount, 3);
+    expect(store.cloudSyncPending, isFalse);
+    expect(store.cloudSyncError, isNull);
+  });
+
   test('未来版本数据不会被旧版应用覆盖', () async {
     final storage = MemoryAppStateStorage();
     storage.values[storageKey] = jsonEncode({
@@ -372,6 +441,22 @@ void main() {
     expect(store.storageLocations, isNot(contains('阅读角')));
   });
 
+  test('归处图标随位置重命名并持久化', () async {
+    final storage = MemoryAppStateStorage();
+    final store = AppStore(storage: storage);
+    await store.load();
+
+    await store.addStorageLocation('健身角', iconKey: 'storage');
+    await store.renameStorageLocation('健身角', '器材角', iconKey: 'garage');
+
+    expect(store.storageLocationIcons['器材角'], 'garage');
+
+    final restored = AppStore(storage: storage);
+    await restored.load();
+    expect(restored.storageLocations, contains('器材角'));
+    expect(restored.storageLocationIconKey('器材角'), 'garage');
+  });
+
   test('物品关联双向保存，删除物品时自动清理关联', () async {
     final storage = MemoryAppStateStorage();
     final store = AppStore(storage: storage);
@@ -411,6 +496,46 @@ void main() {
 
     await store.changeStatus('repair', 'idle', idleReason: '暂时收纳');
     expect(store.itemById('repair')?.idleReason, '暂时收纳');
+  });
+
+  test('再次保存相同维修状态会更新原记录而不是新增轨迹', () async {
+    final storage = MemoryAppStateStorage();
+    final store = AppStore(storage: storage);
+    await store.load();
+    await store.addItem(
+      testItem('same-repair').copyWith(
+        status: 'repairing',
+        repairPlatform: '品牌官方',
+        repairDays: 5,
+        statusHistory: [
+          StatusEvent(status: 'inuse', at: '2026-01-01T00:00:00.000'),
+          StatusEvent(
+            status: 'repairing',
+            at: '2026-02-01T00:00:00.000',
+            note: '品牌官方 · 预计 5 天',
+          ),
+        ],
+      ),
+    );
+
+    await store.changeStatus(
+      'same-repair',
+      'repairing',
+      repairPlatform: '第三方维修',
+      repairDays: 3,
+      repairContactName: '维修师',
+      repairContactPhone: '13800138000',
+    );
+
+    final item = store.itemById('same-repair')!;
+    final repairEvents = item.statusHistory
+        .where((event) => event.status == 'repairing')
+        .toList();
+    expect(repairEvents, hasLength(1));
+    expect(repairEvents.single.at, '2026-02-01T00:00:00.000');
+    expect(item.repairPlatform, '第三方维修');
+    expect(item.repairDays, 3);
+    expect(item.repairContactName, '维修师');
   });
 
   test('游客数据超过三天后自动清理并开启新的三天周期', () async {
@@ -506,7 +631,7 @@ void main() {
     expect(reopened.itemById('guest-sync'), isNotNull);
   });
 
-  test('登录失效回调会清除安全 Token 并切回游客模式', () async {
+  test('登录失效后清除 Token 但保护账号缓存供原账号重新登录', () async {
     final storage = MemoryAppStateStorage();
     final tokenStore = MemorySessionTokenStore();
     final store = AppStore(storage: storage, tokenStore: tokenStore);
@@ -530,8 +655,35 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(store.isGuest, isTrue);
+    expect(store.accountCacheLocked, isTrue);
+    expect(store.itemById('auth-expired'), isNotNull);
     expect(tokenStore.value, isNull);
     expect(store.consumeGlobalNotice(), contains('登录状态已失效'));
+    expect(
+      store.dataForAccountLogin('13800138000').items.single.id,
+      'auth-expired',
+    );
+    expect(store.dataForAccountLogin('13900139000').items, isEmpty);
+
+    final reopened = AppStore(storage: storage, tokenStore: tokenStore);
+    await reopened.load();
+    expect(reopened.isGuest, isTrue);
+    expect(reopened.accountCacheLocked, isTrue);
+    expect(reopened.itemById('auth-expired'), isNotNull);
+  });
+
+  test('归处名称不能占用系统未设置位置标记', () async {
+    final storage = MemoryAppStateStorage();
+    final store = AppStore(storage: storage);
+    await store.load();
+
+    await expectLater(store.addStorageLocation('未设置位置'), throwsArgumentError);
+    await expectLater(
+      store.renameStorageLocation('书房', '未设置位置'),
+      throwsArgumentError,
+    );
+
+    expect(store.storageLocations, isNot(contains('未设置位置')));
   });
 
   test('转赠和丢弃不会计入现金回血金额', () async {

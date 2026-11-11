@@ -20,7 +20,7 @@ class StorageUnassignedInbox extends StatelessWidget {
     final primary = Theme.of(context).colorScheme.primary;
     return SoftCard(
       onTap: onTap,
-      color: Color.lerp(Colors.white, primary, 0.07)!,
+      color: Color.lerp(context.appSurfaceColor, primary, 0.07)!,
       borderColor: primary.withValues(alpha: 0.24),
       padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
       child: Row(
@@ -41,17 +41,7 @@ class StorageUnassignedInbox extends StatelessWidget {
               children: [
                 Text(
                   '$totalCount 件物品暂未归处',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  items.take(3).map((item) => item.name).join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: appMuted, fontSize: 9),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                 ),
               ],
             ),

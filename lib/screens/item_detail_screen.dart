@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../app_store.dart';
 import '../components/info_row.dart';
 import '../components/item_image_carousel.dart';
+import '../components/item_relation_row.dart';
+import '../components/item_tag_chip.dart';
 import '../models.dart';
 import '../storage/local_image_store.dart';
 import '../widgets.dart';
@@ -13,16 +15,19 @@ import 'item_form_screen.dart';
 import 'item_relations_screen.dart';
 
 class ItemDetailScreen extends StatelessWidget {
-  const ItemDetailScreen({super.key, required this.itemId});
+  const ItemDetailScreen({super.key, required this.itemId, this.store});
 
   final String itemId;
+  final AppStore? store;
+
+  AppStore get _store => store ?? AppStore.instance;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: AppStore.instance,
+      animation: _store,
       builder: (context, _) {
-        final item = AppStore.instance.itemById(itemId);
+        final item = _store.itemById(itemId);
         if (item == null) {
           return PageFrame(
             title: '一物一页',
@@ -38,7 +43,7 @@ class ItemDetailScreen extends StatelessWidget {
           );
         }
         final category = item.categoryInfo;
-        final relatedItems = AppStore.instance.items
+        final relatedItems = _store.items
             .where((candidate) => item.relatedItemIds.contains(candidate.id))
             .toList();
         final relatedCostItems = relatedItems
@@ -51,7 +56,7 @@ class ItemDetailScreen extends StatelessWidget {
         final relatedUsageDaily = [
           item,
           ...relatedCostItems,
-        ].fold<double>(0, (sum, entry) => sum + entry.usageDailyCost);
+        ].fold<double>(0, (sum, entry) => sum + entry.usageAverageCost);
         final relatedOwnedDaily = [
           item,
           ...relatedCostItems,
@@ -59,20 +64,22 @@ class ItemDetailScreen extends StatelessWidget {
         return PageFrame(
           title: '一物一页',
           padding: const EdgeInsets.only(top: 8, bottom: 36),
-          action: IconButton(
-            tooltip: item.favorite ? '取消收藏' : '加入收藏',
-            onPressed: () => runStoreAction(
-              context,
-              () => AppStore.instance.toggleFavorite(item.id),
-              successMessage: item.favorite ? '已移出珍爱' : '已放入珍爱',
-            ),
-            icon: Icon(
-              item.favorite
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              color: item.favorite ? appPink : appMuted,
-            ),
-          ),
+          action: item.status == 'retired'
+              ? null
+              : IconButton(
+                  tooltip: item.favorite ? '取消收藏' : '加入收藏',
+                  onPressed: () => runStoreAction(
+                    context,
+                    () => _store.toggleFavorite(item.id),
+                    successMessage: item.favorite ? '已移出珍爱' : '已放入珍爱',
+                  ),
+                  icon: Icon(
+                    item.favorite
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: item.favorite ? appPink : context.appMutedColor,
+                  ),
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -93,7 +100,7 @@ class ItemDetailScreen extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   item.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontFamily: 'Songti SC',
                                     fontSize: 27,
                                     fontWeight: FontWeight.w800,
@@ -111,28 +118,28 @@ class ItemDetailScreen extends StatelessWidget {
                               if (item.storageLocation.isNotEmpty)
                                 item.storageLocation,
                             ].join(' · '),
-                            style: const TextStyle(
-                              color: appMuted,
+                            style: TextStyle(
+                              color: context.appMutedColor,
                               fontSize: 12,
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Container(height: 1, color: appBorder),
+                          Container(height: 1, color: context.appBorderColor),
                           const SizedBox(height: 17),
                           Row(
                             children: [
                               Expanded(
                                 child: MiniMetric(
-                                  label: '购入价',
+                                  label: '购入总价',
                                   value:
-                                      '${item.currencySymbol}${formatMoney(item.purchasePrice)}',
+                                      '${item.currencySymbol}${formatMoney(item.purchaseTotal)}',
                                 ),
                               ),
                               Expanded(
                                 child: MiniMetric(
-                                  label: '当前估值',
+                                  label: '当前总估值',
                                   value:
-                                      '${item.currencySymbol}${formatMoney(item.currentValue)}',
+                                      '${item.currencySymbol}${formatMoney(item.currentTotal)}',
                                 ),
                               ),
                               Expanded(
@@ -161,7 +168,7 @@ class ItemDetailScreen extends StatelessWidget {
                                       ? '使用次均'
                                       : '使用日均',
                                   value:
-                                      '${item.currencySymbol}${formatMoney(item.usageDailyCost)}',
+                                      '${item.currencySymbol}${formatMoney(item.usageAverageCost)}',
                                 ),
                               ),
                               Expanded(
@@ -179,7 +186,7 @@ class ItemDetailScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if (item.effectiveTargetDays > 0) ...[
+                          if (item.effectiveTargetValue > 0) ...[
                             const SizedBox(height: 18),
                             Row(
                               children: [
@@ -187,16 +194,16 @@ class ItemDetailScreen extends StatelessWidget {
                                   item.usageMode == 'manual'
                                       ? '目标次数进度'
                                       : '目标使用进度',
-                                  style: const TextStyle(
-                                    color: appMuted,
+                                  style: TextStyle(
+                                    color: context.appMutedColor,
                                     fontSize: 11,
                                   ),
                                 ),
                                 const Spacer(),
                                 Text(
-                                  '${item.usageDays} / ${item.effectiveTargetDays} '
-                                  '${item.usageMode == 'manual' ? '次' : '天'}',
-                                  style: const TextStyle(
+                                  '${item.usageDays} / ${item.effectiveTargetValue} '
+                                  '${item.targetUsageUnitLabel}',
+                                  style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -209,9 +216,9 @@ class ItemDetailScreen extends StatelessWidget {
                               child: LinearProgressIndicator(
                                 minHeight: 7,
                                 value:
-                                    (item.usageDays / item.effectiveTargetDays)
+                                    (item.usageDays / item.effectiveTargetValue)
                                         .clamp(0, 1),
-                                backgroundColor: const Color(0xFFF1EEE9),
+                                backgroundColor: context.appSurfaceMutedColor,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
@@ -305,12 +312,7 @@ class ItemDetailScreen extends StatelessWidget {
                               label: '剩余量',
                               value: item.remainingNetWeight,
                             ),
-                          _DetailRow(
-                            label: '标签',
-                            value: item.tags.isEmpty
-                                ? '--'
-                                : item.tags.join(' · '),
-                          ),
+                          _DetailTagsRow(tags: item.tags),
                           _DetailRow(
                             label: '备注',
                             value: item.note.isEmpty ? '--' : item.note,
@@ -393,7 +395,7 @@ class ItemDetailScreen extends StatelessWidget {
                                   relatedItems.isEmpty
                                       ? '还没有关联物品'
                                       : '已关联 ${relatedItems.length} 件物品',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -409,7 +411,7 @@ class ItemDetailScreen extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                child: const Text('管理'),
+                                child: Text('管理'),
                               ),
                             ],
                           ),
@@ -434,25 +436,29 @@ class ItemDetailScreen extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 7,
-                              runSpacing: 7,
+                            Column(
                               children: [
-                                for (final related in relatedItems)
-                                  ActionChip(
-                                    avatar: const Icon(
-                                      Icons.inventory_2_outlined,
-                                      size: 14,
+                                for (
+                                  var index = 0;
+                                  index < relatedItems.length;
+                                  index++
+                                ) ...[
+                                  ItemRelationRow(
+                                    key: Key(
+                                      'detail-related-${relatedItems[index].id}',
                                     ),
-                                    label: Text(related.name),
-                                    onPressed: () => Navigator.of(context).push(
+                                    item: relatedItems[index],
+                                    onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute<void>(
                                         builder: (_) => ItemDetailScreen(
-                                          itemId: related.id,
+                                          itemId: relatedItems[index].id,
                                         ),
                                       ),
                                     ),
                                   ),
+                                  if (index < relatedItems.length - 1)
+                                    const ContentDivider(),
+                                ],
                               ],
                             ),
                           ],
@@ -521,83 +527,78 @@ class ItemDetailScreen extends StatelessWidget {
                     const SectionHeading(title: '它的生命轨迹'),
                     _StatusTimeline(item: item),
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            onPressed: item.status == 'processed'
-                                ? null
-                                : () => _changeStatus(context, item),
-                            icon: const Icon(
-                              Icons.swap_horiz_rounded,
-                              size: 18,
-                            ),
-                            label: const Text('更改状态'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Color.lerp(
-                                Theme.of(context).colorScheme.primary,
-                                Colors.white,
-                                0.88,
+                    if (item.status != 'retired' && item.status != 'processed')
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.tonal(
+                              onPressed: () => _changeStatus(context, item),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Color.lerp(
+                                  Theme.of(context).colorScheme.primary,
+                                  Colors.white,
+                                  0.88,
+                                ),
+                                foregroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .primary,
+                                minimumSize: const Size(0, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
-                              foregroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primary,
-                              minimumSize: const Size(0, 50),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
+                              child: Text('更改状态'),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: item.status == 'processed'
-                                ? null
-                                : () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            ItemFormScreen(initial: item),
-                                      ),
-                                    );
-                                  },
-                            icon: const Icon(Icons.edit_outlined, size: 17),
-                            label: const Text('编辑'),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 50),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute<InventoryItem?>(
+                                    builder: (_) =>
+                                        ItemFormScreen(initial: item),
+                                  ),
+                                );
+                              },
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
+                              child: Text('编辑'),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: OutlinedButton(
                         key: const Key('delete-item-button'),
                         onPressed: () => _delete(context, item),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          foregroundColor: const Color(0xFFC6657D),
-                          backgroundColor: const Color(0xFFFCEBEF),
-                          side: const BorderSide(color: Color(0xFFF1CFD7)),
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          backgroundColor: Color.alphaBlend(
+                            Theme.of(context).colorScheme.error
+                                .withValues(alpha: 0.08),
+                            context.appSurfaceColor,
+                          ),
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.error
+                                .withValues(alpha: 0.24),
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          textStyle: const TextStyle(
+                          textStyle: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 18,
-                        ),
-                        label: const Text('删除这件物品'),
+                        child: Text('删除'),
                       ),
                     ),
                   ],
@@ -619,9 +620,19 @@ class ItemDetailScreen extends StatelessWidget {
     );
     if (selection == null) return;
     if (!context.mounted) return;
+    if (selection.status == 'retired') {
+      final confirmed = await confirmAction(
+        context,
+        title: '确认退役？',
+        message: '退役后「${item.name}」将不能编辑或更改状态，只能删除。',
+        confirmLabel: '确认退役',
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+    }
     await runStoreAction(
       context,
-      () => AppStore.instance.changeStatus(
+      () => _store.changeStatus(
         item.id,
         selection.status,
         idleReason: selection.idleReason,
@@ -653,7 +664,7 @@ class ItemDetailScreen extends StatelessWidget {
     if (!context.mounted) return;
     final deleted = await runStoreAction(
       context,
-      () => AppStore.instance.deleteItem(item.id),
+      () => _store.deleteItem(item.id),
       successMessage: '物品已删除',
     );
     if (deleted) {
@@ -676,6 +687,7 @@ class _CostTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final now = DateTime.now();
     final points = List.generate(7, (index) {
       final date = DateTime(now.year, now.month, now.day - (6 - index));
@@ -685,11 +697,11 @@ class _CostTrendCard extends StatelessWidget {
         label: '${date.month}/${date.day}',
         owned: ownedDays <= 0 ? 0.0 : item.purchaseTotal / ownedDays,
         usage: item.usageMode == 'manual'
-            ? item.usageDailyCost
+            ? item.usageAverageCost
             : usageDays <= 0
             ? 0.0
             : item.purchaseTotal / usageDays,
-        target: item.targetDailyCost,
+        target: item.targetAverageCost,
       );
     });
     final maxValue = points.fold<double>(
@@ -704,7 +716,12 @@ class _CostTrendCard extends StatelessWidget {
             height: 170,
             width: double.infinity,
             child: CustomPaint(
-              painter: _CostTrendPainter(points: points, maxValue: maxValue),
+              painter: _CostTrendPainter(
+                points: points,
+                maxValue: maxValue,
+                mutedColor: scheme.onSurfaceVariant,
+                gridColor: scheme.outlineVariant.withValues(alpha: 0.7),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -718,7 +735,7 @@ class _CostTrendCard extends StatelessWidget {
                 label: item.usageMode == 'manual' ? '使用次均' : '使用日均',
               ),
               const _LegendDot(color: Color(0xFFE56B6F), label: '拥有日均'),
-              if (item.targetDailyCost > 0)
+              if (item.targetAverageCost > 0)
                 const _LegendDot(color: Color(0xFF5B7FA6), label: '目标日均'),
             ],
           ),
@@ -748,18 +765,28 @@ class _LegendDot extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: appMuted, fontSize: 9)),
+        Text(
+          label,
+          style: TextStyle(color: context.appMutedColor, fontSize: 9),
+        ),
       ],
     );
   }
 }
 
 class _CostTrendPainter extends CustomPainter {
-  _CostTrendPainter({required this.points, required this.maxValue});
+  _CostTrendPainter({
+    required this.points,
+    required this.maxValue,
+    required this.mutedColor,
+    required this.gridColor,
+  });
 
   final List<({String label, double owned, double usage, double target})>
   points;
   final double maxValue;
+  final Color mutedColor;
+  final Color gridColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -770,7 +797,7 @@ class _CostTrendPainter extends CustomPainter {
     final chartWidth = size.width - left - right;
     final chartHeight = size.height - top - bottom;
     final gridPaint = Paint()
-      ..color = const Color(0xFFEAE5DC)
+      ..color = gridColor
       ..strokeWidth = 1;
     for (var index = 0; index <= 4; index++) {
       final y = top + chartHeight / 4 * index;
@@ -819,7 +846,7 @@ class _CostTrendPainter extends CustomPainter {
       final painter = TextPainter(
         text: TextSpan(
           text: points[index].label,
-          style: const TextStyle(color: appMuted, fontSize: 8),
+          style: TextStyle(color: mutedColor, fontSize: 8),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -833,7 +860,10 @@ class _CostTrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CostTrendPainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.maxValue != maxValue;
+    return oldDelegate.points != points ||
+        oldDelegate.maxValue != maxValue ||
+        oldDelegate.mutedColor != mutedColor ||
+        oldDelegate.gridColor != gridColor;
   }
 }
 
@@ -854,6 +884,51 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+class _DetailTagsRow extends StatelessWidget {
+  const _DetailTagsRow({required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text(
+                '标签',
+                style: TextStyle(color: context.appMutedColor, fontSize: 12),
+              ),
+            ),
+          ),
+          Expanded(
+            child: tags.isEmpty
+                ? Text(
+                    '--',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 12),
+                  )
+                : Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (var index = 0; index < tags.length; index++)
+                        ItemTagChip(label: tags[index], index: index),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusTimeline extends StatelessWidget {
   const _StatusTimeline({required this.item});
 
@@ -866,71 +941,175 @@ class _StatusTimeline extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < history.length; i++)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: statusById(history[i].status).color,
-                        ),
-                      ),
-                      if (i < history.length - 1)
-                        Container(width: 1, height: 36, color: appBorder),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    child: Stack(
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              statusById(history[i].status).name,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              parseDate(history[i].at) == null
-                                  ? '--'
-                                  : formatDate(parseDate(history[i].at)!),
-                              style: const TextStyle(
-                                color: appMuted,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (history[i].note.isNotEmpty) ...[
-                          const SizedBox(height: 5),
-                          Text(
-                            history[i].note,
-                            style: const TextStyle(
-                              color: appMuted,
-                              fontSize: 10,
-                              height: 1.45,
+                        if (i > 0)
+                          Positioned(
+                            top: 0,
+                            left: 9.5,
+                            height: 10,
+                            child: Container(
+                              width: 1,
+                              color: context.appBorderColor,
                             ),
                           ),
-                        ],
+                        if (i < history.length - 1)
+                          Positioned(
+                            top: 10,
+                            bottom: 0,
+                            left: 9.5,
+                            child: Container(
+                              width: 1,
+                              color: context.appBorderColor,
+                            ),
+                          ),
+                        Positioned(
+                          key: Key('timeline-node-$i'),
+                          top: 5,
+                          left: 5,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: statusById(history[i].status).color,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == history.length - 1 ? 0 : 18,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            key: Key('timeline-status-$i'),
+                            height: 20,
+                            child: Row(
+                              children: [
+                                Text(
+                                  statusById(history[i].status).name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  parseDate(history[i].at) == null
+                                      ? '--'
+                                      : formatDate(parseDate(history[i].at)!),
+                                  style: TextStyle(
+                                    color: context.appMutedColor,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ..._eventDetails(history[i]),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _eventDetails(StatusEvent event) {
+    if (event.status == 'repairing') {
+      return [
+        const SizedBox(height: 6),
+        _TimelineDetailText('维修平台：${_valueOrDash(item.repairPlatform)}'),
+        _TimelineDetailText(
+          '预计维修时间：${item.repairDays > 0 ? '${item.repairDays}天' : '--'}',
+        ),
+        _TimelineDetailText('维修联系人：${_valueOrDash(item.repairContactName)}'),
+        _TimelineDetailText('联系电话：${_valueOrDash(item.repairContactPhone)}'),
+      ];
+    }
+    final note = event.status == 'inuse' && event.note.trim() == '物品初始状态'
+        ? _initialInboxText(event)
+        : event.note.trim();
+    if (note.isEmpty) return const [];
+    return [const SizedBox(height: 5), _TimelineDetailText(note)];
+  }
+
+  String _initialInboxText(StatusEvent event) {
+    final date = parseDate(event.at) ?? item.purchaseDateTime;
+    return '${date.year}年${date.month}月${date.day}号收入匣中';
+  }
+
+  String _valueOrDash(String value) {
+    final clean = value.trim();
+    return clean.isEmpty ? '--' : clean;
+  }
+}
+
+class _TimelineDetailText extends StatelessWidget {
+  const _TimelineDetailText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: context.appMutedColor,
+          fontSize: 10,
+          height: 1.45,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusReadOnlyValue extends StatelessWidget {
+  const _StatusReadOnlyValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.appSurfaceMutedColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.appBorderColor),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: context.appMutedColor, fontSize: 11),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );
@@ -947,7 +1126,7 @@ class _StatusSheet extends StatefulWidget {
 }
 
 class _StatusSheetState extends State<_StatusSheet> {
-  late String _status = widget.item.status == 'inuse' ? 'idle' : 'inuse';
+  late String _status = widget.item.status;
   late String _method = widget.item.recoveryMethod.isNotEmpty
       ? widget.item.recoveryMethod
       : widget.item.disposalMethod.isEmpty
@@ -965,7 +1144,6 @@ class _StatusSheetState extends State<_StatusSheet> {
   final _repairName = TextEditingController();
   final _repairPhone = TextEditingController();
   final _price = TextEditingController();
-  final _cost = TextEditingController();
   final _detail = TextEditingController();
 
   static const _repairPlatforms = ['品牌官方', '官方授权维修', '第三方维修', '个人维修', '其他'];
@@ -986,9 +1164,6 @@ class _StatusSheetState extends State<_StatusSheet> {
         ? widget.item.disposalPrice
         : recoveryTarget;
     _price.text = displayPrice > 0 ? formatMoney(displayPrice) : '';
-    _cost.text = widget.item.disposalCost > 0
-        ? formatMoney(widget.item.disposalCost)
-        : '';
     final existingDetail =
         widget.item.recoveryContact.isNotEmpty ||
             widget.item.recoveryPlatform.isNotEmpty
@@ -1009,7 +1184,6 @@ class _StatusSheetState extends State<_StatusSheet> {
     _repairName.dispose();
     _repairPhone.dispose();
     _price.dispose();
-    _cost.dispose();
     _detail.dispose();
     super.dispose();
   }
@@ -1020,9 +1194,9 @@ class _StatusSheetState extends State<_StatusSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.88,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: context.appSurfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -1042,7 +1216,7 @@ class _StatusSheetState extends State<_StatusSheet> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0DCD5),
+                    color: context.appBorderColor,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -1050,16 +1224,13 @@ class _StatusSheetState extends State<_StatusSheet> {
               const SizedBox(height: 18),
               Text(
                 _statusTitle,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
               Text(
                 _statusHint,
-                style: const TextStyle(
-                  color: appMuted,
+                style: TextStyle(
+                  color: context.appMutedColor,
                   fontSize: 12,
                   height: 1.5,
                 ),
@@ -1075,12 +1246,14 @@ class _StatusSheetState extends State<_StatusSheet> {
                       onSelected: (_) => setState(() => _status = status.id),
                       showCheckmark: false,
                       selectedColor: status.softColor,
-                      backgroundColor: const Color(0xFFF6F2ED),
+                      backgroundColor: context.appSurfaceMutedColor,
                       side: BorderSide.none,
                       label: Text(
                         status.name,
                         style: TextStyle(
-                          color: _status == status.id ? status.color : appMuted,
+                          color: _status == status.id
+                              ? status.color
+                              : context.appMutedColor,
                           fontSize: 12,
                         ),
                       ),
@@ -1140,7 +1313,14 @@ class _StatusSheetState extends State<_StatusSheet> {
                   ),
                 ),
               ] else if (_status == 'processed') ...[
+                _StatusReadOnlyValue(
+                  label: '购入价格',
+                  value:
+                      '${widget.item.currencySymbol}${formatMoney(widget.item.purchaseTotal)}',
+                ),
+                const SizedBox(height: 12),
                 BottomSelectField<String>(
+                  key: const Key('processing-method-field'),
                   label: '处理方式',
                   value: _method,
                   options: const [
@@ -1161,6 +1341,7 @@ class _StatusSheetState extends State<_StatusSheet> {
                 if (_method == '转卖' || _method == '回收') ...[
                   const SizedBox(height: 12),
                   BottomSelectField<String>(
+                    key: const Key('processing-platform-field'),
                     label: _method == '回收' ? '回收平台' : '转卖平台',
                     value: _disposalPlatform.isEmpty ? null : _disposalPlatform,
                     hint: '请选择平台',
@@ -1175,13 +1356,13 @@ class _StatusSheetState extends State<_StatusSheet> {
                         setState(() => _disposalPlatform = value ?? ''),
                   ),
                 ],
-                if (_method == '转卖' || _method == '转赠') ...[
+                if (_method == '转赠') ...[
                   const SizedBox(height: 12),
                   TextField(
                     controller: _detail,
                     maxLength: 20,
                     decoration: InputDecoration(
-                      labelText: _method == '转赠' ? '接收人' : '转卖人',
+                      labelText: '接收人',
                       counterText: '',
                     ),
                   ),
@@ -1198,25 +1379,55 @@ class _StatusSheetState extends State<_StatusSheet> {
                       prefixText: '${widget.item.currencySymbol} ',
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _cost,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: '运费、手续费等成本',
-                      prefixText: '${widget.item.currencySymbol} ',
-                    ),
-                  ),
                 ],
                 const SizedBox(height: 12),
-                InkWell(
-                  onTap: _chooseProcessDate,
-                  borderRadius: BorderRadius.circular(16),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: '处理日期'),
-                    child: Text(_processDate),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    key: const Key('process-date-picker'),
+                    onPressed: _chooseProcessDate,
+                    style: OutlinedButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      minimumSize: const Size(0, 54),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      side: BorderSide(color: context.appBorderColor),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_month_outlined,
+                          size: 19,
+                          color: context.appMutedColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '处理日期(购买日-至今)',
+                                style: TextStyle(
+                                  color: context.appMutedColor,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _processDate,
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: context.appMutedColor,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1246,17 +1457,23 @@ class _StatusSheetState extends State<_StatusSheet> {
   };
 
   Future<void> _chooseProcessDate() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final today = DateTime.now();
-    final purchaseDate = widget.item.purchaseDateTime;
     final picked = await showAppDatePicker(
       context,
       initialDate: parseDate(_processDate) ?? today,
-      firstDate: purchaseDate.isAfter(today) ? today : purchaseDate,
+      firstDate: _processDateFirstDate,
       lastDate: today,
       title: '选择处理日期',
       confirmLabel: '确定处理日期',
     );
     if (picked != null) setState(() => _processDate = formatDate(picked));
+  }
+
+  DateTime get _processDateFirstDate {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final purchaseDate = DateUtils.dateOnly(widget.item.purchaseDateTime);
+    return purchaseDate.isAfter(today) ? today : purchaseDate;
   }
 
   void _submit() {
@@ -1269,8 +1486,8 @@ class _StatusSheetState extends State<_StatusSheet> {
         showAppSnack(context, _method == '回收' ? '请选择回收平台' : '请选择转卖平台');
         return;
       }
-      if ((_method == '转卖' || _method == '转赠') && _detail.text.trim().isEmpty) {
-        showAppSnack(context, _method == '转卖' ? '请输入转卖人' : '请输入接收人');
+      if (_method == '转赠' && _detail.text.trim().isEmpty) {
+        showAppSnack(context, '请输入接收人');
         return;
       }
       if ((_method == '转卖' || _method == '回收') &&
@@ -1304,9 +1521,7 @@ class _StatusSheetState extends State<_StatusSheet> {
         price: _status == 'processed' && (_method == '转卖' || _method == '回收')
             ? double.tryParse(_price.text.replaceAll(',', '')) ?? 0
             : 0,
-        cost: _status == 'processed' && (_method == '转卖' || _method == '回收')
-            ? double.tryParse(_cost.text.replaceAll(',', '')) ?? 0
-            : 0,
+        cost: 0,
         processDate: _status == 'processed' ? _processDate : '',
       ),
     );

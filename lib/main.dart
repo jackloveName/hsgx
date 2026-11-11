@@ -12,7 +12,7 @@ Future<void> main() async {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
       statusBarBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.white,
+      systemNavigationBarColor: Color(0xFFF4F0E8),
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );

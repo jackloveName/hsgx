@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models.dart';
+import '../components/app_brand_icon.dart';
 import '../services/agreement_page_launcher.dart';
 import '../services/agreement_service.dart';
 import '../storage/privacy_consent_store.dart';
+import '../widgets.dart';
 import 'privacy_screen.dart';
 
 class PrivacyGate extends StatefulWidget {
@@ -46,7 +48,8 @@ class _PrivacyGateState extends State<PrivacyGate> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
     if (_loading) {
       return Stack(
         children: [
@@ -74,7 +77,7 @@ class _PrivacyGateState extends State<PrivacyGate> {
               child: Dialog(
                 key: const Key('privacy-consent-dialog'),
                 insetPadding: EdgeInsets.zero,
-                backgroundColor: Colors.white,
+                backgroundColor: scheme.surfaceContainerLowest,
                 surfaceTintColor: Colors.transparent,
                 clipBehavior: Clip.antiAlias,
                 elevation: 28,
@@ -95,54 +98,45 @@ class _PrivacyGateState extends State<PrivacyGate> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Color.lerp(primary, Colors.white, 0.86)!,
-                              const Color(0xFFFFFDFB),
+                              Color.lerp(
+                                primary,
+                                scheme.surfaceContainerLowest,
+                                scheme.brightness == Brightness.dark
+                                    ? 0.88
+                                    : 0.86,
+                              )!,
+                              scheme.surfaceContainerLowest,
                             ],
                           ),
                         ),
                         child: Column(
                           children: [
-                            Container(
-                              width: 72,
-                              height: 72,
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(23),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: primary.withValues(alpha: 0.14),
-                                    blurRadius: 22,
-                                    offset: const Offset(0, 9),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(19),
-                                child: Image.asset(
-                                  'static/image/app-icon-192.png',
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
+                            AppBrandIcon(
+                              size: 72,
+                              radius: 23,
+                              backgroundColor: scheme.surfaceContainerLowest,
+                              shadowColor: primary.withValues(alpha: 0.14),
+                              shadowBlur: 22,
+                              shadowOffset: const Offset(0, 9),
                             ),
                             const SizedBox(height: 18),
-                            const Text(
+                            Text(
                               '服务协议和隐私政策',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: 'Songti SC',
-                                color: appText,
+                                color: context.appTextColor,
                                 fontSize: 21,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.5,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               '开始使用前，请阅读并同意以下内容',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: appMuted,
+                                color: context.appMutedColor,
                                 fontSize: 12,
                                 height: 1.5,
                               ),
@@ -161,7 +155,7 @@ class _PrivacyGateState extends State<PrivacyGate> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFAF7F2),
+                                color: scheme.surfaceContainer,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Column(
@@ -173,10 +167,7 @@ class _PrivacyGateState extends State<PrivacyGate> {
                                     accent: primary,
                                     onTap: () => _openAgreement(0),
                                   ),
-                                  const Padding(
-                                    padding: EdgeInsets.only(left: 54),
-                                    child: Divider(height: 1),
-                                  ),
+                                  const ContentDivider(indent: 54),
                                   _AgreementEntry(
                                     icon: Icons.description_outlined,
                                     title: '平台注册协议',
@@ -196,10 +187,13 @@ class _PrivacyGateState extends State<PrivacyGate> {
                                   vertical: 9,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF2F4),
+                                  color: Color.alphaBlend(
+                                    scheme.error.withValues(alpha: 0.12),
+                                    scheme.surfaceContainerLowest,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '需要同意两份协议后才能继续使用',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
@@ -216,14 +210,16 @@ class _PrivacyGateState extends State<PrivacyGate> {
                                   child: OutlinedButton(
                                     onPressed: _refuse,
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: appMuted,
-                                      side: const BorderSide(color: appBorder),
+                                      foregroundColor: context.appMutedColor,
+                                      side: BorderSide(
+                                        color: context.appBorderColor,
+                                      ),
                                       minimumSize: const Size(0, 48),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(15),
                                       ),
                                     ),
-                                    child: const Text('暂不同意'),
+                                    child: Text('暂不同意'),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -233,7 +229,7 @@ class _PrivacyGateState extends State<PrivacyGate> {
                                     style: FilledButton.styleFrom(
                                       minimumSize: const Size(0, 48),
                                     ),
-                                    child: const Text('同意'),
+                                    child: Text('同意'),
                                   ),
                                 ),
                               ],
@@ -266,16 +262,16 @@ class _PrivacyGateState extends State<PrivacyGate> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('确认暂不同意'),
-        content: const Text('不同意协议将无法进入花拾归匣。你可以返回阅读协议，或确认暂不使用。'),
+        title: Text('确认暂不同意'),
+        content: Text('不同意协议将无法进入花拾归匣。你可以返回阅读协议，或确认暂不使用。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('继续阅读'),
+            child: Text('继续阅读'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('暂不使用'),
+            child: Text('暂不使用'),
           ),
         ],
       ),
@@ -343,8 +339,8 @@ class _AgreementEntry extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: appText,
+                      style: TextStyle(
+                        color: context.appTextColor,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -352,8 +348,8 @@ class _AgreementEntry extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       description,
-                      style: const TextStyle(
-                        color: appMuted,
+                      style: TextStyle(
+                        color: context.appMutedColor,
                         fontSize: 10,
                         height: 1.3,
                       ),
@@ -365,13 +361,13 @@ class _AgreementEntry extends StatelessWidget {
               Container(
                 width: 26,
                 height: 26,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: context.appSurfaceColor,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_forward_ios_rounded,
-                  color: appMuted,
+                  color: context.appMutedColor,
                   size: 11,
                 ),
               ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter/services.dart';
 
 import 'app_store.dart';
+import 'models.dart';
 import 'screens/home_screen.dart';
 import 'screens/insights_screen.dart';
 import 'screens/item_form_screen.dart';
@@ -66,8 +68,23 @@ class _HsgxAppState extends State<HsgxApp> with WidgetsBindingObserver {
       valueListenable: AppStore.instance.skinListenable,
       builder: (context, skinIndex, _) {
         final resolvedSkinIndex = skinIndex < 0
-            ? (_platformBrightness == Brightness.dark ? 9 : 0)
+            ? (_platformBrightness == Brightness.dark ? appSkins.length - 1 : 0)
             : skinIndex;
+        final skin = appSkinAt(resolvedSkinIndex);
+        final isDark = skin.brightness == Brightness.dark;
+        SystemChrome.setSystemUIOverlayStyle(
+          SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: isDark
+                ? Brightness.light
+                : Brightness.dark,
+            statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+            systemNavigationBarColor: skin.background,
+            systemNavigationBarIconBrightness: isDark
+                ? Brightness.light
+                : Brightness.dark,
+          ),
+        );
         return MaterialApp(
           title: '花拾归匣',
           debugShowCheckedModeBanner: false,
@@ -162,6 +179,12 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     Icons.auto_graph_rounded,
     Icons.person_rounded,
   ];
+  static const _pages = <Widget>[
+    HomeScreen(),
+    ItemsScreen(),
+    InsightsScreen(),
+    ProfileScreen(),
+  ];
 
   @override
   void initState() {
@@ -204,28 +227,29 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
       await _showGuestLimitDialog();
       return;
     }
-    await Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const ItemFormScreen()));
+    await Navigator.of(context).push<InventoryItem?>(
+      MaterialPageRoute<InventoryItem?>(builder: (_) => const ItemFormScreen()),
+    );
   }
 
   Future<void> _showGuestLimitDialog() async {
     final shouldLogin = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.lock_clock_outlined, size: 30),
-        title: const Text('游客添加次数已用完'),
-        content: const Text(
+        icon: Icon(Icons.lock_clock_outlined, size: 30),
+        title: Text('游客添加次数已用完'),
+        content: Text(
           '游客模式最多可添加 3 次物品。登录后可以不限次数记录，'
           '现有记录不会丢失。',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('稍后再说'),
+            child: Text('稍后再说'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('登录继续'),
+            child: Text('登录继续'),
           ),
         ],
       ),
@@ -241,46 +265,34 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppStore.instance,
-      builder: (context, _) {
-        final pages = [
-          HomeScreen(),
-          const ItemsScreen(),
-          const InsightsScreen(),
-          const ProfileScreen(),
-        ];
-        return Scaffold(
-          extendBody: true,
-          backgroundColor: Colors.transparent,
-          body: IndexedStack(index: currentIndex, children: pages),
-          floatingActionButton: SizedBox(
-            width: 66,
-            height: 66,
-            child: FloatingActionButton(
-              onPressed: openAddItem,
-              elevation: 8,
-              tooltip: '拾一件',
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              shape: const CircleBorder(),
-              child: const Icon(
-                Icons.add_rounded,
-                color: Colors.white,
-                size: 32,
-              ),
-            ),
+    return Scaffold(
+      extendBody: true,
+      backgroundColor: Colors.transparent,
+      body: IndexedStack(index: currentIndex, children: _pages),
+      floatingActionButton: SizedBox(
+        width: 66,
+        height: 66,
+        child: FloatingActionButton(
+          onPressed: openAddItem,
+          elevation: 8,
+          tooltip: '拾一件',
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          shape: const CircleBorder(),
+          child: Icon(
+            Icons.add_rounded,
+            color: Theme.of(context).colorScheme.onPrimary,
+            size: 32,
           ),
-          floatingActionButtonLocation:
-              FloatingActionButtonLocation.centerDocked,
-          bottomNavigationBar: _Dock(
-            currentIndex: currentIndex,
-            labels: _labels,
-            icons: _icons,
-            selectedIcons: _selectedIcons,
-            onSelect: selectTab,
-          ),
-        );
-      },
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: _Dock(
+        currentIndex: currentIndex,
+        labels: _labels,
+        icons: _icons,
+        selectedIcons: _selectedIcons,
+        onSelect: selectTab,
+      ),
     );
   }
 }

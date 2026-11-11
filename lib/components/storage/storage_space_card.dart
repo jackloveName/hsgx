@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../../models.dart';
 import '../../widgets.dart';
+import 'storage_location_icons.dart';
 
 class StorageSpaceCard extends StatelessWidget {
   const StorageSpaceCard({
     super.key,
     required this.location,
+    required this.iconKey,
     required this.items,
     required this.onTap,
   });
 
   final String location;
+  final String iconKey;
   final List<InventoryItem> items;
   final VoidCallback onTap;
 
@@ -30,6 +33,7 @@ class StorageSpaceCard extends StatelessWidget {
       (sum, item) => sum + item.currentTotal,
     );
     final primary = Theme.of(context).colorScheme.primary;
+    final softPrimary = Color.lerp(primary, context.appSurfaceColor, 0.88)!;
     return SoftCard(
       onTap: onTap,
       padding: const EdgeInsets.all(12),
@@ -43,11 +47,11 @@ class StorageSpaceCard extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: Color.lerp(primary, Colors.white, 0.88),
+                  color: softPrimary,
                   borderRadius: BorderRadius.circular(11),
                 ),
                 child: Icon(
-                  storageLocationIcon(location),
+                  storageLocationIcon(location, iconKey: iconKey),
                   color: primary,
                   size: 19,
                 ),
@@ -58,16 +62,13 @@ class StorageSpaceCard extends StatelessWidget {
                   location,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                 ),
               ),
               Icon(
                 Icons.chevron_right_rounded,
                 size: 18,
-                color: appMuted.withValues(alpha: 0.8),
+                color: context.appMutedColor.withValues(alpha: 0.8),
               ),
             ],
           ),
@@ -78,7 +79,7 @@ class StorageSpaceCard extends StatelessWidget {
             children: [
               Text(
                 '${items.length} 件',
-                style: const TextStyle(color: appMuted, fontSize: 9),
+                style: TextStyle(color: context.appMutedColor, fontSize: 9),
               ),
               const Spacer(),
               Text(
@@ -109,14 +110,14 @@ class _SpacePreview extends StatelessWidget {
     if (items.isEmpty) {
       return Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F4EF),
+          color: context.appSurfaceMutedColor,
           borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: appBorder),
+          border: Border.all(color: context.appBorderColor),
         ),
-        child: const Center(
+        child: Center(
           child: Icon(
             Icons.inventory_2_outlined,
-            color: Color(0xFFB5AFA7),
+            color: context.appMutedColor,
             size: 24,
           ),
         ),
@@ -142,7 +143,7 @@ class _SpacePreview extends StatelessWidget {
                       )
                     : DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF7F4EF),
+                          color: context.appSurfaceMutedColor,
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
@@ -152,25 +153,4 @@ class _SpacePreview extends StatelessWidget {
       },
     );
   }
-}
-
-IconData storageLocationIcon(String location) {
-  final normalized = location.toLowerCase();
-  if (normalized.contains('客厅')) return Icons.weekend_outlined;
-  if (normalized.contains('卧室') || normalized.contains('床')) {
-    return Icons.bed_outlined;
-  }
-  if (normalized.contains('书房') || normalized.contains('阅读')) {
-    return Icons.menu_book_outlined;
-  }
-  if (normalized.contains('厨房')) return Icons.kitchen_outlined;
-  if (normalized.contains('卫生间') || normalized.contains('浴室')) {
-    return Icons.bathtub_outlined;
-  }
-  if (normalized.contains('玄关')) return Icons.door_front_door_outlined;
-  if (normalized.contains('阳台')) return Icons.balcony_outlined;
-  if (normalized.contains('包') || normalized.contains('通勤')) {
-    return Icons.backpack_outlined;
-  }
-  return Icons.place_outlined;
 }

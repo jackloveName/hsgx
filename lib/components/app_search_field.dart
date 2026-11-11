@@ -19,7 +19,7 @@ class AppSearchField extends StatelessWidget {
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        prefixIcon: Icon(Icons.search_rounded, size: 20),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
@@ -28,7 +28,7 @@ class AppSearchField extends StatelessWidget {
                   controller.clear();
                   onChanged('');
                 },
-                icon: const Icon(Icons.close_rounded, size: 18),
+                icon: Icon(Icons.close_rounded, size: 18),
               ),
       ),
     );

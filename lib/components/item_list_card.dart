@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../widgets.dart';
+import 'item_name_text.dart';
 
 class ItemListCard extends StatelessWidget {
   const ItemListCard({
@@ -34,11 +35,9 @@ class ItemListCard extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                      child: ItemNameText(
+                        name: item.name,
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
                         ),
@@ -46,11 +45,7 @@ class ItemListCard extends StatelessWidget {
                     ),
                     if (item.favorite) ...[
                       const SizedBox(width: 5),
-                      const Icon(
-                        Icons.favorite_rounded,
-                        size: 12,
-                        color: appPink,
-                      ),
+                      Icon(Icons.favorite_rounded, size: 12, color: appPink),
                     ],
                   ],
                 ),
@@ -60,7 +55,7 @@ class ItemListCard extends StatelessWidget {
                   '${item.storageLocation.isEmpty ? '未设置位置' : item.storageLocation}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: appMuted, fontSize: 11),
+                  style: TextStyle(color: context.appMutedColor, fontSize: 11),
                 ),
                 const SizedBox(height: 7),
                 Row(
