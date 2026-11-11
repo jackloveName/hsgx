@@ -1,4 +1,4 @@
-package com.hsgx.hsgx
+package uni.app.bbxj
 
 import io.flutter.embedding.android.FlutterActivity
 
