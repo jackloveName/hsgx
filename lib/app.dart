@@ -165,6 +165,8 @@ class MainShell extends StatefulWidget {
 
 class MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int currentIndex = 0;
+  final _homeKey = GlobalKey<HomeScreenState>();
+  late final List<Widget> _pages;
 
   static const _labels = ['首页', '物品', '洞察', '我的'];
   static const _icons = [
@@ -179,16 +181,15 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
     Icons.auto_graph_rounded,
     Icons.person_rounded,
   ];
-  static const _pages = <Widget>[
-    HomeScreen(),
-    ItemsScreen(),
-    InsightsScreen(),
-    ProfileScreen(),
-  ];
-
   @override
   void initState() {
     super.initState();
+    _pages = [
+      HomeScreen(key: _homeKey),
+      const ItemsScreen(),
+      const InsightsScreen(),
+      const ProfileScreen(),
+    ];
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final notice = AppStore.instance.consumeGuestDataNotice();
@@ -207,6 +208,9 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    if (currentIndex == 0) {
+      _homeKey.currentState?.refreshUserAndCheckUpdate();
+    }
     AppStore.instance.expireGuestDataIfNeeded().then((expired) {
       if (expired && mounted) {
         showAppSnack(context, '游客数据已达到 3 天保存期限，已自动清理');
@@ -215,7 +219,12 @@ class MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void selectTab(int index) {
+    if (index == currentIndex) {
+      if (index == 0) _homeKey.currentState?.refreshUserAndCheckUpdate();
+      return;
+    }
     setState(() => currentIndex = index);
+    if (index == 0) _homeKey.currentState?.refreshUserAndCheckUpdate();
   }
 
   void openItems() {

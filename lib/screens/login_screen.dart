@@ -320,6 +320,7 @@ class _LoginScreenState extends State<LoginScreen> {
         avatarPath: profile.avatarPath,
         birthday: profile.birthday,
         gender: profile.gender,
+        borrowFlagEnabled: profile.borrowFlagEnabled,
       );
       if (!mounted) return;
       _finishLogin();

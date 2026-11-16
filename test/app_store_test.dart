@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hsgx/app_store.dart';
 import 'package:hsgx/models.dart';
+import 'package:hsgx/screens/home_screen.dart';
 import 'package:hsgx/services/cloud_sync_service.dart';
 import 'package:hsgx/storage/app_state_storage.dart';
 import 'package:hsgx/storage/session_token_store.dart';
@@ -629,6 +630,44 @@ void main() {
     await reopened.load();
     expect(reopened.isAuthenticated, isTrue);
     expect(reopened.itemById('guest-sync'), isNotNull);
+  });
+
+  test('borrowFlag 随账号持久化，并只允许首页在它为 1 时检查更新', () async {
+    final storage = MemoryAppStateStorage();
+    final tokenStore = MemorySessionTokenStore();
+    final store = AppStore(storage: storage, tokenStore: tokenStore);
+    await store.load();
+
+    expect(HomeScreen.shouldCheckForUpdate(store), isFalse);
+    await store.completeAccountSync(
+      token: 'token',
+      phone: '13800138000',
+      name: '测试账号',
+      borrowFlagEnabled: true,
+      result: CloudSyncResult(
+        items: const [],
+        wishlist: const [],
+        storageLocations: const ['书房'],
+        uploadedImageCount: 0,
+        syncedAt: DateTime.now(),
+      ),
+    );
+
+    expect(store.borrowFlagEnabled, isTrue);
+    expect(HomeScreen.shouldCheckForUpdate(store), isTrue);
+    expect(
+      (jsonDecode(storage.values[storageKey]!) as Map)['borrowFlagEnabled'],
+      isTrue,
+    );
+
+    final reopened = AppStore(storage: storage, tokenStore: tokenStore);
+    await reopened.load();
+    expect(reopened.borrowFlagEnabled, isTrue);
+    expect(HomeScreen.shouldCheckForUpdate(reopened), isTrue);
+
+    await reopened.logoutToGuest();
+    expect(reopened.borrowFlagEnabled, isFalse);
+    expect(HomeScreen.shouldCheckForUpdate(reopened), isFalse);
   });
 
   test('登录失效后清除 Token 但保护账号缓存供原账号重新登录', () async {

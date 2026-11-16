@@ -61,6 +61,9 @@ class AppStore extends ChangeNotifier {
   String accountAvatarPath = '';
   String accountBirthday = '';
   String accountGender = '';
+
+  /// 版本更新只取用户信息中的 borrowFlag；仅等于 1 时开启检查。
+  bool borrowFlagEnabled = false;
   String sessionToken = '';
   DateTime? guestStartedAt;
   int guestAddCount = 0;
@@ -256,6 +259,7 @@ class AppStore extends ChangeNotifier {
       }
       if (authMode == 'account' && sessionToken.isEmpty) {
         _accountCacheLocked = true;
+        borrowFlagEnabled = false;
         cloudSyncPending = false;
         cloudSyncError = null;
         loadError = tokenStorageFailed
@@ -401,6 +405,8 @@ class AppStore extends ChangeNotifier {
       accountAvatarPath: map['accountAvatarPath']?.toString() ?? '',
       accountBirthday: map['accountBirthday']?.toString() ?? '',
       accountGender: map['accountGender']?.toString() ?? '',
+      borrowFlagEnabled:
+          authMode == 'account' && map['borrowFlagEnabled'] == true,
       sessionToken: map['sessionToken']?.toString() ?? '',
       guestStartedAt: DateTime.tryParse(
         map['guestStartedAt']?.toString() ?? '',
@@ -444,6 +450,7 @@ class AppStore extends ChangeNotifier {
     accountAvatarPath = snapshot.accountAvatarPath;
     accountBirthday = snapshot.accountBirthday;
     accountGender = snapshot.accountGender;
+    borrowFlagEnabled = snapshot.borrowFlagEnabled;
     guestStartedAt = snapshot.guestStartedAt;
     guestAddCount = snapshot.guestAddCount;
     cloudSyncPending = snapshot.cloudSyncPending;
@@ -468,6 +475,7 @@ class AppStore extends ChangeNotifier {
           accountAvatarPath: accountAvatarPath,
           accountBirthday: accountBirthday,
           accountGender: accountGender,
+          borrowFlagEnabled: borrowFlagEnabled,
           guestStartedAt: guestStartedAt,
           guestAddCount: guestAddCount,
           cloudSyncPending: cloudSyncPending,
@@ -487,6 +495,7 @@ class AppStore extends ChangeNotifier {
       'accountAvatarPath': snapshot.accountAvatarPath,
       'accountBirthday': snapshot.accountBirthday,
       'accountGender': snapshot.accountGender,
+      'borrowFlagEnabled': snapshot.borrowFlagEnabled,
       'guestStartedAt': snapshot.guestStartedAt?.toIso8601String(),
       'guestAddCount': snapshot.guestAddCount,
       'cloudSyncPending': snapshot.cloudSyncPending,
@@ -542,6 +551,7 @@ class AppStore extends ChangeNotifier {
     String avatarPath = '',
     String birthday = '',
     String gender = '',
+    bool borrowFlagEnabled = false,
   }) async {
     await _tokenStore.write(token);
     try {
@@ -569,6 +579,7 @@ class AppStore extends ChangeNotifier {
         accountAvatarPath = avatarPath;
         accountBirthday = birthday;
         accountGender = gender;
+        this.borrowFlagEnabled = borrowFlagEnabled;
         sessionToken = token;
         guestStartedAt = null;
         guestAddCount = 0;
@@ -608,6 +619,7 @@ class AppStore extends ChangeNotifier {
       accountAvatarPath = '';
       accountBirthday = '';
       accountGender = '';
+      borrowFlagEnabled = false;
       sessionToken = '';
       guestStartedAt = DateTime.now();
       guestAddCount = 0;
@@ -642,6 +654,7 @@ class AppStore extends ChangeNotifier {
       await _mutate(
         () {
           _accountCacheLocked = true;
+          borrowFlagEnabled = false;
           cloudSyncPending = false;
           cloudSyncError = null;
           sessionToken = '';
@@ -989,6 +1002,11 @@ class AppStore extends ChangeNotifier {
     }, syncAccount: false);
   }
 
+  Future<void> setBorrowFlagEnabled(bool enabled) async {
+    if (borrowFlagEnabled == enabled) return;
+    await _mutate(() => borrowFlagEnabled = enabled, syncAccount: false);
+  }
+
   Future<void> changeStatus(
     String id,
     String status, {
@@ -1315,6 +1333,7 @@ class _AppSnapshot {
     required this.accountAvatarPath,
     required this.accountBirthday,
     required this.accountGender,
+    required this.borrowFlagEnabled,
     this.sessionToken = '',
     required this.guestStartedAt,
     required this.guestAddCount,
@@ -1335,6 +1354,7 @@ class _AppSnapshot {
   final String accountAvatarPath;
   final String accountBirthday;
   final String accountGender;
+  final bool borrowFlagEnabled;
   final String sessionToken;
   final DateTime? guestStartedAt;
   final int guestAddCount;

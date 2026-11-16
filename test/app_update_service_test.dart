@@ -84,7 +84,10 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => check = service.checkAndShow(context),
+              onPressed: () => check = service.checkAndShow(
+                context,
+                borrowFlagEnabled: true,
+              ),
               child: const Text('检查更新'),
             ),
           ),
@@ -148,7 +151,10 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => check = service.checkAndShow(context),
+              onPressed: () => check = service.checkAndShow(
+                context,
+                borrowFlagEnabled: true,
+              ),
               child: const Text('检查强制更新'),
             ),
           ),
@@ -168,5 +174,45 @@ void main() {
     Navigator.of(tester.element(find.byType(Dialog))).pop();
     await tester.pumpAndSettle();
     await check;
+  });
+
+  testWidgets('borrowFlag 不是 1 时不请求版本配置也不弹更新框', (tester) async {
+    var requests = 0;
+    final service = AppUpdateService(
+      client: MockClient((request) async {
+        requests += 1;
+        return http.Response(
+          jsonEncode({
+            'code': '00000',
+            'data': {'androidVersion': '9.9.9'},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    Future<void>? check;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => check = service.checkAndShow(
+                context,
+                borrowFlagEnabled: false,
+              ),
+              child: const Text('检查更新'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('检查更新'));
+    await tester.pumpAndSettle();
+    await check;
+
+    expect(requests, 0);
+    expect(find.byKey(const Key('app-update-dialog')), findsNothing);
   });
 }

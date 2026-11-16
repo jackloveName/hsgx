@@ -39,7 +39,14 @@ class AppUpdateService {
   final ApiClient _api;
   late final ConfigApi _config;
 
-  Future<void> checkAndShow(BuildContext context) async {
+  Future<void> checkAndShow(
+    BuildContext context, {
+    required bool borrowFlagEnabled,
+  }) async {
+    if (!borrowFlagEnabled) {
+      _api.close();
+      return;
+    }
     AppUpdateInfo? update;
     try {
       final raw = await _config.readPublic(ApiSettings.appBrand);

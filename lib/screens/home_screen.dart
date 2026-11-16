@@ -11,6 +11,7 @@ import '../domain/home_insight.dart';
 import '../domain/items_browse.dart';
 import '../models.dart';
 import '../services/app_update_service.dart';
+import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -21,19 +22,70 @@ import 'storage_screen.dart';
 import 'wishlist_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.store,
+    this.userProfileLoader,
+    this.updateChecker,
+  });
+
+  final AppStore? store;
+  final Future<UserProfile> Function(AppStore store)? userProfileLoader;
+  final Future<void> Function(BuildContext context)? updateChecker;
+
+  /// borrowFlag 不是 1 或取不到时，完全不请求版本配置、不弹更新框。
+  static bool shouldCheckForUpdate(AppStore store) =>
+      store.isAuthenticated && store.borrowFlagEnabled;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
+  bool _checkingHomeUpdate = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) AppUpdateService().checkAndShow(context);
+      if (mounted) refreshUserAndCheckUpdate();
     });
+  }
+
+  /// 每次进入首页都重新读取用户详情，再决定是否检查更新。
+  Future<void> refreshUserAndCheckUpdate() async {
+    final store = widget.store ?? AppStore.instance;
+    if (_checkingHomeUpdate || !store.isAuthenticated) return;
+
+    _checkingHomeUpdate = true;
+    final token = store.sessionToken;
+    AuthService? auth;
+    try {
+      final profile = await (() async {
+        final loader = widget.userProfileLoader;
+        if (loader != null) return loader(store);
+        auth = AuthService(onUnauthorized: store.handleUnauthorized);
+        return auth!.getUserProfile(token, fallbackPhone: store.accountPhone);
+      })();
+      if (!mounted || !store.isAuthenticated || store.sessionToken != token) {
+        return;
+      }
+      await store.setBorrowFlagEnabled(profile.borrowFlagEnabled);
+      if (!mounted || !HomeScreen.shouldCheckForUpdate(store)) return;
+
+      final checker =
+          widget.updateChecker ??
+          (context) => AppUpdateService().checkAndShow(
+            context,
+            borrowFlagEnabled: store.borrowFlagEnabled,
+          );
+      await checker(context);
+    } on Object {
+      // 用户状态或版本检查失败时保持静默，下次进入首页再试。
+    } finally {
+      auth?.close();
+      _checkingHomeUpdate = false;
+    }
   }
 
   @override

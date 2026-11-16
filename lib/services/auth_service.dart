@@ -26,6 +26,7 @@ class UserProfile {
     this.avatarPath = '',
     this.birthday = '',
     this.gender = '',
+    this.borrowFlagEnabled = false,
   });
 
   final String name;
@@ -33,6 +34,7 @@ class UserProfile {
   final String avatarPath;
   final String birthday;
   final String gender;
+  final bool borrowFlagEnabled;
 }
 
 class AuthService {
@@ -131,6 +133,7 @@ class AuthService {
         ),
         birthday: (user['birthDate'] ?? user['birthday'] ?? '').toString(),
         gender: (user['sex'] ?? user['gender'] ?? '').toString(),
+        borrowFlagEnabled: _borrowFlagEnabled(user['borrowFlag']),
       );
     } on Object {
       return UserProfile(name: fallbackPhone, phone: fallbackPhone);
@@ -225,6 +228,11 @@ class AuthService {
       return '${AppConfig.resourceBaseUrl}$path';
     }
     return path;
+  }
+
+  static bool _borrowFlagEnabled(Object? value) {
+    if (value is num) return value == 1;
+    return double.tryParse('${value ?? ''}'.trim()) == 1;
   }
 
   Map<String, Object?> _unwrapUser(Object? value) {

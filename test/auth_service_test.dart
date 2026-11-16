@@ -30,6 +30,28 @@ class FakeAuthClient extends http.BaseClient {
   }
 }
 
+class ProfileAuthClient extends http.BaseClient {
+  ProfileAuthClient(this.profile);
+
+  final Map<String, Object?> profile;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final bytes = utf8.encode(
+      jsonEncode({
+        'code': '00000',
+        'data': {'userInfo': profile},
+      }),
+    );
+    return http.StreamedResponse(
+      Stream.value(bytes),
+      200,
+      headers: {'content-type': 'application/json'},
+      request: request,
+    );
+  }
+}
+
 void main() {
   test('密码登录发送 AES-ECB 加密后的密码与访问凭证', () async {
     final client = FakeAuthClient();
@@ -87,5 +109,35 @@ void main() {
     expect(client.lastRequest?.url.path, '/mall_user/user/destroy_user');
     expect(client.lastRequest?.url.queryParameters['forceDestroy'], 'false');
     expect(client.lastRequest?.headers['Authorization'], 'token-3');
+  });
+
+  test('用户详情只有 borrowFlag 为 1 时才开启版本更新判断', () async {
+    for (final enabled in <Object?>[1, '1', ' 1 ']) {
+      final service = AuthService(
+        client: ProfileAuthClient({'borrowFlag': enabled}),
+      );
+      addTearDown(service.close);
+
+      final profile = await service.getUserProfile(
+        'token',
+        fallbackPhone: '13800138000',
+      );
+
+      expect(profile.borrowFlagEnabled, isTrue, reason: '$enabled');
+    }
+
+    for (final disabled in <Object?>[0, '0', 2, '2', null, '', true]) {
+      final service = AuthService(
+        client: ProfileAuthClient({'borrowFlag': disabled}),
+      );
+      addTearDown(service.close);
+
+      final profile = await service.getUserProfile(
+        'token',
+        fallbackPhone: '13800138000',
+      );
+
+      expect(profile.borrowFlagEnabled, isFalse, reason: '$disabled');
+    }
   });
 }
