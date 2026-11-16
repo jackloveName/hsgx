@@ -15,6 +15,7 @@ import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'agreement/service_agreement_screen.dart';
 import 'item_detail_screen.dart';
 import 'login_screen.dart';
 import 'recovery_screen.dart';
@@ -27,11 +28,13 @@ class HomeScreen extends StatefulWidget {
     this.store,
     this.userProfileLoader,
     this.updateChecker,
+    this.agreementPageBuilder,
   });
 
   final AppStore? store;
   final Future<UserProfile> Function(AppStore store)? userProfileLoader;
-  final Future<void> Function(BuildContext context)? updateChecker;
+  final Future<bool> Function(BuildContext context)? updateChecker;
+  final WidgetBuilder? agreementPageBuilder;
 
   /// borrowFlag 不是 1 或取不到时，完全不请求版本配置、不弹更新框。
   static bool shouldCheckForUpdate(AppStore store) =>
@@ -70,7 +73,10 @@ class HomeScreenState extends State<HomeScreen> {
       if (!mounted || !store.isAuthenticated || store.sessionToken != token) {
         return;
       }
-      await store.setBorrowFlagEnabled(profile.borrowFlagEnabled);
+      await store.updateRemoteUserState(
+        borrowFlagEnabled: profile.borrowFlagEnabled,
+        userId: profile.userId,
+      );
       if (!mounted || !HomeScreen.shouldCheckForUpdate(store)) return;
 
       final checker =
@@ -79,7 +85,19 @@ class HomeScreenState extends State<HomeScreen> {
             context,
             borrowFlagEnabled: store.borrowFlagEnabled,
           );
-      await checker(context);
+      final updateShown = await checker(context);
+      if (!updateShown &&
+          mounted &&
+          store.isAuthenticated &&
+          store.sessionToken == token) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder:
+                widget.agreementPageBuilder ??
+                (_) => const ServiceAgreementScreen(),
+          ),
+        );
+      }
     } on Object {
       // 用户状态或版本检查失败时保持静默，下次进入首页再试。
     } finally {

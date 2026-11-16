@@ -23,6 +23,7 @@ class UserProfile {
   const UserProfile({
     required this.name,
     required this.phone,
+    this.userId = '',
     this.avatarPath = '',
     this.birthday = '',
     this.gender = '',
@@ -31,6 +32,7 @@ class UserProfile {
 
   final String name;
   final String phone;
+  final String userId;
   final String avatarPath;
   final String birthday;
   final String gender;
@@ -121,6 +123,7 @@ class AuthService {
                     fallbackPhone)
                 .toString(),
         phone: (user['phone'] ?? user['mobile'] ?? fallbackPhone).toString(),
+        userId: (user['userId'] ?? user['uid'] ?? user['id'] ?? '').toString(),
         avatarPath: _resolveAvatarPath(
           (user['pic'] ??
                   user['avatar'] ??

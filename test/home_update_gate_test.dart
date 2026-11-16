@@ -50,6 +50,7 @@ void main() {
             },
             updateChecker: (_) async {
               updateChecks += 1;
+              return true;
             },
           ),
         ),
@@ -77,5 +78,75 @@ void main() {
     expect(profileRequests, 3);
     expect(store.borrowFlagEnabled, isFalse);
     expect(updateChecks, 1);
+  });
+
+  testWidgets('borrowFlag 为 1 且无需更新时进入 agreement', (tester) async {
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final store = AppStore(storage: _MemoryStorage())
+      ..authMode = 'account'
+      ..accountPhone = '13800138000'
+      ..accountName = '测试账号'
+      ..sessionToken = 'token';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            store: store,
+            userProfileLoader: (_) async => const UserProfile(
+              name: '测试账号',
+              phone: '13800138000',
+              borrowFlagEnabled: true,
+            ),
+            updateChecker: (_) async => false,
+            agreementPageBuilder: (_) =>
+                const Scaffold(body: Text('agreement-test-page')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('agreement-test-page'), findsOneWidget);
+  });
+
+  testWidgets('出现更新框时不进入 agreement', (tester) async {
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final store = AppStore(storage: _MemoryStorage())
+      ..authMode = 'account'
+      ..accountPhone = '13800138000'
+      ..accountName = '测试账号'
+      ..sessionToken = 'token';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            store: store,
+            userProfileLoader: (_) async => const UserProfile(
+              name: '测试账号',
+              phone: '13800138000',
+              borrowFlagEnabled: true,
+            ),
+            updateChecker: (_) async => true,
+            agreementPageBuilder: (_) =>
+                const Scaffold(body: Text('agreement-test-page')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('agreement-test-page'), findsNothing);
   });
 }

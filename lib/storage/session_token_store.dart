@@ -1,4 +1,4 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'app_state_storage.dart';
 
 abstract class SessionTokenStore {
   Future<String?> read();
@@ -8,23 +8,32 @@ abstract class SessionTokenStore {
   Future<void> clear();
 }
 
-class SecureSessionTokenStore implements SessionTokenStore {
-  const SecureSessionTokenStore([this._storage = const FlutterSecureStorage()]);
+class LocalSessionTokenStore implements SessionTokenStore {
+  const LocalSessionTokenStore(this._storage);
 
-  static const _key = 'hsgx.sessionToken';
+  static const _key = 'hsgx.sessionToken.local';
 
-  final FlutterSecureStorage _storage;
-
-  @override
-  Future<String?> read() => _storage.read(key: _key);
+  final AppStateStorage _storage;
 
   @override
-  Future<void> write(String token) {
-    return _storage.write(key: _key, value: token);
+  Future<String?> read() async {
+    final value = await _storage.read(_key);
+    return value == null || value.isEmpty ? null : value;
   }
 
   @override
-  Future<void> clear() => _storage.delete(key: _key);
+  Future<void> write(String token) async {
+    if (!await _storage.write(_key, token)) {
+      throw StateError('登录凭证写入本地存储失败');
+    }
+  }
+
+  @override
+  Future<void> clear() async {
+    if (!await _storage.write(_key, '')) {
+      throw StateError('登录凭证清理本地存储失败');
+    }
+  }
 }
 
 class MemorySessionTokenStore implements SessionTokenStore {

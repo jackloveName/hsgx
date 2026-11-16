@@ -103,7 +103,7 @@ void main() {
         );
       }),
     );
-    Future<void>? check;
+    Future<bool>? check;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -134,7 +134,7 @@ void main() {
 
     await tester.tap(find.text('稍后'));
     await tester.pumpAndSettle();
-    await check;
+    expect(await check, isTrue);
 
     expect(find.byKey(const Key('app-update-dialog')), findsNothing);
     final preferences = await SharedPreferences.getInstance();
@@ -170,7 +170,7 @@ void main() {
         );
       }),
     );
-    Future<void>? check;
+    Future<bool>? check;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -198,7 +198,7 @@ void main() {
 
     Navigator.of(tester.element(find.byType(Dialog))).pop();
     await tester.pumpAndSettle();
-    await check;
+    expect(await check, isTrue);
   });
 
   testWidgets('borrowFlag 不是 1 时不请求版本配置也不弹更新框', (tester) async {
@@ -216,7 +216,7 @@ void main() {
         );
       }),
     );
-    Future<void>? check;
+    Future<bool>? check;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -235,7 +235,7 @@ void main() {
 
     await tester.tap(find.text('检查更新'));
     await tester.pumpAndSettle();
-    await check;
+    expect(await check, isFalse);
 
     expect(requests, 0);
     expect(find.byKey(const Key('app-update-dialog')), findsNothing);

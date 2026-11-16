@@ -28,6 +28,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>用于拍摄物品照片和头像。</string>
+	<key>NSContactsUsageDescription</key>
+	<string>用于完成账号安全校验</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于服务页面内的语音和视频功能。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于选择物品照片和头像。</string>
 	<key>UIApplicationSceneManifest</key>

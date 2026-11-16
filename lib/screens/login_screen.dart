@@ -316,6 +316,7 @@ class _LoginScreenState extends State<LoginScreen> {
         token: session.token,
         phone: session.phone,
         name: profile.name,
+        userId: profile.userId,
         result: result,
         avatarPath: profile.avatarPath,
         birthday: profile.birthday,

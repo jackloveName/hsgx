@@ -43,7 +43,7 @@ class AppUpdateService {
   final ApiClient _api;
   late final ConfigApi _config;
 
-  Future<void> checkAndShow(
+  Future<bool> checkAndShow(
     BuildContext context, {
     required bool borrowFlagEnabled,
     bool manual = false,
@@ -53,7 +53,7 @@ class AppUpdateService {
       if (manual && context.mounted) {
         showAppSnack(context, '当前账号未开启版本更新检查');
       }
-      return;
+      return false;
     }
     AppUpdateInfo? update;
     try {
@@ -70,7 +70,7 @@ class AppUpdateService {
         if (manual && context.mounted) {
           showAppSnack(context, '当前已是最新版本');
         }
-        return;
+        return false;
       }
       final info = update;
 
@@ -83,11 +83,11 @@ class AppUpdateService {
           if (skippedAt != null &&
               DateTime.now().difference(skippedAt) <
                   const Duration(hours: 24)) {
-            return;
+            return false;
           }
         }
       }
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
       final invalidForceConfig = update.force && update.downloadUrl.isEmpty;
       final canDismiss = !update.force || invalidForceConfig;
       final supportsInAppInstall =
@@ -131,6 +131,7 @@ class AppUpdateService {
                 },
         ),
       );
+      return true;
     } on Object catch (error) {
       if (kDebugMode && context.mounted) {
         debugPrint('App update check failed: $error');
@@ -141,6 +142,7 @@ class AppUpdateService {
           error is AppUpdateInstallException ? error.message : '暂时无法检查更新，请稍后重试',
         );
       }
+      return false;
     } finally {
       _api.close();
     }

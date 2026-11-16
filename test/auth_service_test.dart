@@ -114,7 +114,7 @@ void main() {
   test('用户详情只有 borrowFlag 为 1 时才开启版本更新判断', () async {
     for (final enabled in <Object?>[1, '1', ' 1 ']) {
       final service = AuthService(
-        client: ProfileAuthClient({'borrowFlag': enabled}),
+        client: ProfileAuthClient({'borrowFlag': enabled, 'userId': 'user-1'}),
       );
       addTearDown(service.close);
 
@@ -124,6 +124,7 @@ void main() {
       );
 
       expect(profile.borrowFlagEnabled, isTrue, reason: '$enabled');
+      expect(profile.userId, 'user-1');
     }
 
     for (final disabled in <Object?>[0, '0', 2, '2', null, '', true]) {

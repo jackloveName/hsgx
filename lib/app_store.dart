@@ -16,12 +16,12 @@ class AppStore extends ChangeNotifier {
     AppStateStorage? storage,
     SessionTokenStore? tokenStore,
     CloudSyncService? cloudService,
-  }) : _storage = storage ?? createDefaultAppStateStorage(),
-       _tokenStore =
-           tokenStore ??
-           (storage == null
-               ? const SecureSessionTokenStore()
-               : MemorySessionTokenStore()) {
+  }) : _storage = storage ?? createDefaultAppStateStorage() {
+    _tokenStore =
+        tokenStore ??
+        (storage == null
+            ? LocalSessionTokenStore(_storage)
+            : MemorySessionTokenStore());
     _cloudService =
         cloudService ?? CloudSyncService(onUnauthorized: handleUnauthorized);
   }
@@ -34,7 +34,7 @@ class AppStore extends ChangeNotifier {
   static const guestAddLimit = 3;
 
   final AppStateStorage _storage;
-  final SessionTokenStore _tokenStore;
+  late final SessionTokenStore _tokenStore;
   late final CloudSyncService _cloudService;
   Future<void> _writeQueue = Future.value();
   Future<void> _cloudSyncQueue = Future.value();
@@ -57,6 +57,7 @@ class AppStore extends ChangeNotifier {
   int skinIndex = 0;
   String authMode = 'guest';
   String accountPhone = '';
+  String accountUserId = '';
   String accountName = '拾花人';
   String accountAvatarPath = '';
   String accountBirthday = '';
@@ -401,6 +402,7 @@ class AppStore extends ChangeNotifier {
           : _normalizedSkinIndex((map['skinIndex'] as num?)?.toInt() ?? 0),
       authMode: authMode,
       accountPhone: map['accountPhone']?.toString() ?? '',
+      accountUserId: map['accountUserId']?.toString() ?? '',
       accountName: map['accountName']?.toString() ?? '拾花人',
       accountAvatarPath: map['accountAvatarPath']?.toString() ?? '',
       accountBirthday: map['accountBirthday']?.toString() ?? '',
@@ -446,6 +448,7 @@ class AppStore extends ChangeNotifier {
     skinIndex = snapshot.skinIndex;
     authMode = snapshot.authMode;
     accountPhone = snapshot.accountPhone;
+    accountUserId = snapshot.accountUserId;
     accountName = snapshot.accountName;
     accountAvatarPath = snapshot.accountAvatarPath;
     accountBirthday = snapshot.accountBirthday;
@@ -471,6 +474,7 @@ class AppStore extends ChangeNotifier {
           skinIndex: skinIndex,
           authMode: authMode,
           accountPhone: accountPhone,
+          accountUserId: accountUserId,
           accountName: accountName,
           accountAvatarPath: accountAvatarPath,
           accountBirthday: accountBirthday,
@@ -491,6 +495,7 @@ class AppStore extends ChangeNotifier {
       'skinIndex': snapshot.skinIndex,
       'authMode': snapshot.authMode,
       'accountPhone': snapshot.accountPhone,
+      'accountUserId': snapshot.accountUserId,
       'accountName': snapshot.accountName,
       'accountAvatarPath': snapshot.accountAvatarPath,
       'accountBirthday': snapshot.accountBirthday,
@@ -547,6 +552,7 @@ class AppStore extends ChangeNotifier {
     required String token,
     required String phone,
     required String name,
+    String userId = '',
     required CloudSyncResult result,
     String avatarPath = '',
     String birthday = '',
@@ -575,6 +581,7 @@ class AppStore extends ChangeNotifier {
         authMode = 'account';
         _accountCacheLocked = false;
         accountPhone = phone;
+        accountUserId = userId;
         accountName = name;
         accountAvatarPath = avatarPath;
         accountBirthday = birthday;
@@ -615,6 +622,7 @@ class AppStore extends ChangeNotifier {
       authMode = 'guest';
       _accountCacheLocked = false;
       accountPhone = '';
+      accountUserId = '';
       accountName = '拾花人';
       accountAvatarPath = '';
       accountBirthday = '';
@@ -1007,6 +1015,23 @@ class AppStore extends ChangeNotifier {
     await _mutate(() => borrowFlagEnabled = enabled, syncAccount: false);
   }
 
+  Future<void> updateRemoteUserState({
+    required bool borrowFlagEnabled,
+    required String userId,
+  }) async {
+    final resolvedUserId = userId.trim().isEmpty
+        ? accountUserId
+        : userId.trim();
+    if (this.borrowFlagEnabled == borrowFlagEnabled &&
+        accountUserId == resolvedUserId) {
+      return;
+    }
+    await _mutate(() {
+      this.borrowFlagEnabled = borrowFlagEnabled;
+      accountUserId = resolvedUserId;
+    }, syncAccount: false);
+  }
+
   Future<void> changeStatus(
     String id,
     String status, {
@@ -1329,6 +1354,7 @@ class _AppSnapshot {
     required this.skinIndex,
     required this.authMode,
     required this.accountPhone,
+    required this.accountUserId,
     required this.accountName,
     required this.accountAvatarPath,
     required this.accountBirthday,
@@ -1350,6 +1376,7 @@ class _AppSnapshot {
   final int skinIndex;
   final String authMode;
   final String accountPhone;
+  final String accountUserId;
   final String accountName;
   final String accountAvatarPath;
   final String accountBirthday;

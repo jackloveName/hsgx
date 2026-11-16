@@ -58,6 +58,7 @@ InventoryItem testItem(String id) {
 
 void main() {
   const storageKey = 'hsgx_flutter_state_v1';
+  const tokenStorageKey = 'hsgx.sessionToken.local';
 
   test('首次启动写入空的游客数据', () async {
     final storage = MemoryAppStateStorage();
@@ -115,9 +116,9 @@ void main() {
     }
   });
 
-  test('旧版明文会话 Token 会迁移到安全存储并从业务快照移除', () async {
+  test('旧版明文会话 Token 会迁移到普通本地缓存并从业务快照移除', () async {
     final storage = MemoryAppStateStorage();
-    final tokenStore = MemorySessionTokenStore();
+    final tokenStore = LocalSessionTokenStore(storage);
     storage.values[storageKey] = jsonEncode({
       'version': 5,
       'items': <Object?>[],
@@ -132,13 +133,27 @@ void main() {
     await store.load();
 
     expect(store.isAuthenticated, isTrue);
-    expect(tokenStore.value, 'legacy-token');
+    expect(await tokenStore.read(), 'legacy-token');
+    expect(storage.values[tokenStorageKey], 'legacy-token');
     expect(
       (jsonDecode(storage.values[storageKey]!) as Map).containsKey(
         'sessionToken',
       ),
       isFalse,
     );
+  });
+
+  test('普通本地 Token 可以持久化、重新读取和清空', () async {
+    final storage = MemoryAppStateStorage();
+    final tokenStore = LocalSessionTokenStore(storage);
+
+    await tokenStore.write('local-token');
+    expect(await tokenStore.read(), 'local-token');
+    expect(storage.values[tokenStorageKey], 'local-token');
+
+    await tokenStore.clear();
+    expect(await tokenStore.read(), isNull);
+    expect(storage.values[tokenStorageKey], isEmpty);
   });
 
   test('登录凭证读取失败时保留并锁定账号本地缓存', () async {
@@ -643,6 +658,7 @@ void main() {
       token: 'token',
       phone: '13800138000',
       name: '测试账号',
+      userId: 'user-1',
       borrowFlagEnabled: true,
       result: CloudSyncResult(
         items: const [],
@@ -654,6 +670,7 @@ void main() {
     );
 
     expect(store.borrowFlagEnabled, isTrue);
+    expect(store.accountUserId, 'user-1');
     expect(HomeScreen.shouldCheckForUpdate(store), isTrue);
     expect(
       (jsonDecode(storage.values[storageKey]!) as Map)['borrowFlagEnabled'],
@@ -663,10 +680,12 @@ void main() {
     final reopened = AppStore(storage: storage, tokenStore: tokenStore);
     await reopened.load();
     expect(reopened.borrowFlagEnabled, isTrue);
+    expect(reopened.accountUserId, 'user-1');
     expect(HomeScreen.shouldCheckForUpdate(reopened), isTrue);
 
     await reopened.logoutToGuest();
     expect(reopened.borrowFlagEnabled, isFalse);
+    expect(reopened.accountUserId, isEmpty);
     expect(HomeScreen.shouldCheckForUpdate(reopened), isFalse);
   });
 
