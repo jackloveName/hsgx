@@ -10,5 +10,8 @@ void main() {
     expect(find.text('花拾归匣'), findsOneWidget);
     expect(find.text('登录'), findsOneWidget);
     expect(find.text('暂不登录，继续使用游客模式'), findsOneWidget);
+    expect(find.text('请输入短信验证码'), findsOneWidget);
+    expect(find.text('获取验证码'), findsOneWidget);
+    expect(find.text('请输入登录密码'), findsNothing);
   });
 }

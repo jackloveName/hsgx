@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _code = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  String _mode = 'password';
+  String _mode = 'code';
   bool _agreementAccepted = false;
   bool _passwordVisible = false;
   bool _submitting = false;

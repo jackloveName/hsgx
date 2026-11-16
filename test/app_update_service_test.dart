@@ -30,7 +30,32 @@ void main() {
     expect(info, isNotNull);
     expect(info!.version, '2.3.0');
     expect(info.force, isTrue);
+    expect(info.updateWay, 1);
     expect(info.notes, contains('优化体验'));
+  });
+
+  test('Android 更新方式会区分应用内安装和外部下载页', () {
+    final inApp = AppUpdateService.parseUpdateInfo(
+      {
+        'androidVersion': '1.1.0',
+        'androidAppDownloadUrl': 'https://example.com/app.apk',
+        'androidUpdateWay': '0',
+      },
+      currentVersion: '1.0.0',
+      isIOS: false,
+    );
+    final browser = AppUpdateService.parseUpdateInfo(
+      {
+        'androidVersion': '1.1.0',
+        'androidAppDownloadUrl': 'https://example.com/app',
+        'androidUpdateWay': '1',
+      },
+      currentVersion: '1.0.0',
+      isIOS: false,
+    );
+
+    expect(inApp?.updateWay, 0);
+    expect(browser?.updateWay, 1);
   });
 
   test('关闭更新或版本不高于当前版本时不提示', () {
@@ -119,7 +144,7 @@ void main() {
     );
   });
 
-  testWidgets('强制更新只限制操作而不展示额外说明', (tester) async {
+  testWidgets('强制更新提示必须更新且不提供稍后按钮', (tester) async {
     PackageInfo.setMockInitialValues(
       appName: '花拾归匣',
       packageName: 'com.hsgx.hsgx',
@@ -166,8 +191,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('app-update-icon')), findsOneWidget);
-    expect(find.text('强制更新'), findsNothing);
-    expect(find.textContaining('完成更新后才能继续使用'), findsNothing);
+    expect(find.text('必须更新'), findsOneWidget);
+    expect(find.textContaining('需要更新后继续使用'), findsOneWidget);
     expect(find.text('稍后'), findsNothing);
     expect(find.text('立即更新'), findsOneWidget);
 
